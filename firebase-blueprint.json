@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Public and private user information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["uid", "email", "displayName", "role", "createdAt"]
+    },
+    "Event": {
+      "title": "Event",
+      "description": "Details of an event",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "date": { "type": "string" },
+        "venue": { "type": "string" },
+        "speakers": { "type": "array", "items": { "type": "string" } },
+        "capacity": { "type": "number" },
+        "registeredCount": { "type": "number" },
+        "imageUrl": { "type": "string" }
+      }
+    },
+    "Registration": {
+      "title": "Registration",
+      "description": "User registration for an event",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "eventId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "status": { "type": "string", "enum": ["registered", "attended"] },
+        "registeredAt": { "type": "number" },
+        "attendedAt": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profiles"
+    },
+    "events/{eventId}": {
+      "schema": "Event",
+      "description": "Event tracking"
+    },
+    "registrations/{registrationId}": {
+      "schema": "Registration",
+      "description": "Event registrations"
+    }
+  }
+}

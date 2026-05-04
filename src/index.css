@@ -1,1 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap');
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-[#0F0A1F] text-white antialiased selection:bg-[#9D4EDD] selection:text-white;
+    border: 12px solid #1E1642;
+    min-height: 100vh;
+    @media (max-width: 768px) {
+      border: 6px solid #1E1642;
+    }
+  }
+}
+
+.glass-morphism {
+  @apply backdrop-blur-2xl bg-white/[0.03] border border-white/10;
+}
+
+.text-huge {
+  @apply font-black uppercase tracking-tighter leading-[0.82];
+  font-size: clamp(3rem, 15vw, 12rem);
+}
+
+.text-display {
+  @apply font-black uppercase tracking-tighter leading-[0.9];
+  font-size: clamp(2rem, 8vw, 6rem);
+}
+
+.protocol-label {
+  @apply text-[10px] font-black uppercase tracking-[0.4em] text-[#00E5FF] mb-4 flex items-center gap-2;
+}
+
+.protocol-label::before {
+  content: '';
+  @apply w-1.5 h-1.5 bg-[#9D4EDD] rounded-full;
+}
+
+.premium-gradient {
+  background: linear-gradient(135deg, #FFD166 0%, #FF9E00 100%);
+}
+
+/* Custom hide scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
+}
