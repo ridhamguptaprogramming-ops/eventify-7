@@ -12,6 +12,7 @@ export function Navbar() {
 
   const navLinks = [
     { path: '/events', label: 'Calendar', sub: 'Schedule' },
+    { path: '/highlights', label: 'Highlights', sub: 'Archive' },
     { path: '/about', label: 'Experience', sub: 'About' },
   ];
 

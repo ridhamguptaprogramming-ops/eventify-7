@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { collection, getDocs, doc, getDoc, addDoc, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { motion } from 'motion/react';
 import { 
   Calendar, 
@@ -34,39 +34,33 @@ export default function EventDetailsPage() {
   const [activeCategory, setActiveCategory] = useState('ALL');
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        if (!id) {
-          const querySnapshot = await getDocs(collection(db, 'events'));
-          const eventList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Event));
-          setEvents(eventList);
-        } else {
-          const docRef = doc(db, 'events', id);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            setCurrentEvent({ id: docSnap.id, ...docSnap.data() } as Event);
-            
-            // Check if user is registered
-            if (user) {
-              const q = query(
-                collection(db, 'registrations'), 
-                where('eventId', '==', id), 
-                where('userId', '==', user.uid)
-              );
-              const regSnap = await getDocs(q);
-              setIsRegistered(!regSnap.empty);
-            }
-          }
-        }
-      } catch (err) {
-        handleFirestoreError(err, OperationType.LIST, 'events');
-      } finally {
-        setLoading(false);
-      }
-    };
+    let unsubEvent: () => void = () => {};
+    let unsubEvents: () => void = () => {};
 
-    fetchData();
+    if (!id) {
+      unsubEvents = onSnapshot(collection(db, 'events'), (snapshot) => {
+        setEvents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Event)));
+        setLoading(false);
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'events'));
+    } else {
+      unsubEvent = onSnapshot(doc(db, 'events', id), (snapshot) => {
+        if (snapshot.exists()) {
+          setCurrentEvent({ id: snapshot.id, ...snapshot.data() } as Event);
+        }
+        setLoading(false);
+      }, (err) => handleFirestoreError(err, OperationType.GET, `events/${id}`));
+
+      // Check if user is registered (not real-time for now to save reads, but could be)
+      if (user) {
+        getDocs(query(collection(db, 'registrations'), where('eventId', '==', id), where('userId', '==', user.uid)))
+          .then(regSnap => setIsRegistered(!regSnap.empty));
+      }
+    }
+
+    return () => {
+      unsubEvent();
+      unsubEvents();
+    };
   }, [id, user]);
 
   const handleRegister = async () => {

@@ -15,6 +15,7 @@ import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
 import EventDetailsPage from './pages/EventDetailsPage';
 import AboutPage from './pages/AboutPage';
+import HighlightsPage from './pages/HighlightsPage';
 import { UserRole } from './types';
 
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode, adminOnly?: boolean }) {
@@ -35,6 +36,7 @@ function PageRoutes() {
         <AnimatePresence mode="wait">
           <Routes>
             <Route path="/" element={<LandingPage />} />
+            <Route path="/highlights" element={<HighlightsPage />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/login" element={<RegistrationPage />} />
             <Route path="/events/:id?" element={<EventDetailsPage />} />

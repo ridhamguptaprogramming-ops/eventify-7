@@ -1,10 +1,60 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Shield, Zap, Sparkles, Globe, Cpu, Users } from 'lucide-react';
+import { Shield, Zap, Sparkles, Globe, Cpu, Users, Linkedin, Github, ExternalLink } from 'lucide-react';
 import { GlassCard, PremiumButton } from '../components/ui/PremiumComponents';
 import { Link } from 'react-router-dom';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { TeamMember } from '../types';
 
 export default function AboutPage() {
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'team'), (snapshot) => {
+      const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeamMember));
+      
+      // If empty, use some defaults for first-time visibility
+      if (members.length === 0) {
+        setTeam([
+          {
+            id: '1',
+            name: 'Dr. Alistair Vance',
+            role: 'Chief Architect',
+            bio: 'Pioneer in distributed identity protocols and neural interface design.',
+            imageUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80',
+            linkedinUrl: '#',
+            githubUrl: '#'
+          },
+          {
+            id: '2',
+            name: 'Serafina Thorne',
+            role: 'Hardware Lead',
+            bio: 'Specialist in biometric security systems and proximity-based verification.',
+            imageUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80',
+            linkedinUrl: '#',
+            githubUrl: '#'
+          },
+          {
+            id: '3',
+            name: 'Julian Nexus',
+            role: 'Core Systems',
+            bio: 'Optimizing high-concurrency event data streams and real-time synchronization.',
+            imageUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80',
+            linkedinUrl: '#',
+            githubUrl: '#'
+          }
+        ]);
+      } else {
+        setTeam(members);
+      }
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, []);
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -24,7 +74,7 @@ export default function AboutPage() {
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className="space-y-20"
+        className="space-y-32"
       >
         <section className="text-left w-full">
           <div className="protocol-label">Inception / Origins</div>
@@ -56,6 +106,75 @@ export default function AboutPage() {
               </GlassCard>
             </motion.div>
           ))}
+        </section>
+
+        {/* Team Showcase Section */}
+        <section>
+          <div className="flex flex-col md:flex-row items-end justify-between gap-6 mb-16">
+            <div>
+              <div className="protocol-label mb-4">Personnel / Collective</div>
+              <h2 className="text-display">Meet the Builders.</h2>
+            </div>
+            <div className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em]">
+              Built by humans, <span className="text-[#9D4EDD]">powered by precision</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {team.map((member) => (
+              <motion.div 
+                key={member.id} 
+                variants={itemVariants}
+                whileHover={{ y: -10 }}
+              >
+                <GlassCard className="p-0 overflow-hidden border-white/5 hover:border-[#9D4EDD]/30 transition-all group relative">
+                  <div className="h-80 relative overflow-hidden">
+                    {member.imageUrl ? (
+                      <img 
+                        src={member.imageUrl} 
+                        alt={member.name} 
+                        className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-110"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-white/5 flex items-center justify-center text-3xl font-black text-white/10 uppercase">
+                        {member.name.split(' ').map(n => n[0]).join('')}
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0F0A1F] via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
+                    
+                    {/* Social Hover Overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center gap-4 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-4 group-hover:translate-y-0">
+                      {member.linkedinUrl && (
+                        <a href={member.linkedinUrl} target="_blank" rel="noopener noreferrer" className="p-3 bg-white/10 backdrop-blur-md rounded-full border border-white/20 hover:bg-[#9D4EDD] hover:border-[#9D4EDD] transition-all">
+                          <Linkedin size={20} />
+                        </a>
+                      )}
+                      {member.githubUrl && (
+                        <a href={member.githubUrl} target="_blank" rel="noopener noreferrer" className="p-3 bg-white/10 backdrop-blur-md rounded-full border border-white/20 hover:bg-[#9D4EDD] hover:border-[#9D4EDD] transition-all">
+                          <Github size={20} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="p-8">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-[#9D4EDD] mb-2">{member.role}</div>
+                    <h3 className="text-2xl font-black uppercase tracking-tight mb-4 group-hover:text-white transition-colors">{member.name}</h3>
+                    {member.bio && (
+                      <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest leading-relaxed line-clamp-2">
+                        {member.bio}
+                      </p>
+                    )}
+                  </div>
+                  
+                  {/* Decorative corner element */}
+                  <div className="absolute bottom-4 right-4 text-white/5 group-hover:text-[#9D4EDD]/20 transition-colors">
+                    <ExternalLink size={16} />
+                  </div>
+                </GlassCard>
+              </motion.div>
+            ))}
+          </div>
         </section>
 
         <section className="py-20 border-t border-white/5">

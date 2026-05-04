@@ -22,6 +22,8 @@ export interface Event {
   registeredCount: number;
   imageUrl?: string;
   category?: string;
+  startDate?: number;
+  endDate?: number;
 }
 
 export interface Registration {
@@ -33,6 +35,23 @@ export interface Registration {
   status: 'registered' | 'attended';
   registeredAt: number;
   attendedAt?: number;
+}
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  role: string;
+  bio?: string;
+  imageUrl?: string;
+  linkedinUrl?: string;
+  githubUrl?: string;
+}
+
+export interface Stats {
+  totalEvents: number;
+  liveEvents: number;
+  completedEvents: number;
+  totalUsers: number;
 }
 
 export enum OperationType {

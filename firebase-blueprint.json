@@ -26,7 +26,9 @@
         "speakers": { "type": "array", "items": { "type": "string" } },
         "capacity": { "type": "number" },
         "registeredCount": { "type": "number" },
-        "imageUrl": { "type": "string" }
+        "imageUrl": { "type": "string" },
+        "startDate": { "type": "number" },
+        "endDate": { "type": "number" }
       }
     },
     "Registration": {
@@ -43,6 +45,32 @@
         "registeredAt": { "type": "number" },
         "attendedAt": { "type": "number" }
       }
+    },
+    "TeamMember": {
+      "title": "Team Member",
+      "description": "Information about the project team",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "bio": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "linkedinUrl": { "type": "string" },
+        "githubUrl": { "type": "string" }
+      },
+      "required": ["name", "role"]
+    },
+    "Stats": {
+      "title": "Application Stats",
+      "description": "Aggregated platform metrics",
+      "type": "object",
+      "properties": {
+        "totalEvents": { "type": "number" },
+        "liveEvents": { "type": "number" },
+        "completedEvents": { "type": "number" },
+        "totalUsers": { "type": "number" }
+      }
     }
   },
   "firestore": {
@@ -57,6 +85,14 @@
     "registrations/{registrationId}": {
       "schema": "Registration",
       "description": "Event registrations"
+    },
+    "team/{memberId}": {
+      "schema": "TeamMember",
+      "description": "Project team members"
+    },
+    "stats/{statsId}": {
+      "schema": "Stats",
+      "description": "System-wide metrics"
     }
   }
 }

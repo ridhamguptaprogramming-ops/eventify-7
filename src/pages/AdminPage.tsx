@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, doc, updateDoc, query, orderBy, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { Link } from 'react-router-dom';
+import { collection, onSnapshot, doc, updateDoc, query, orderBy, deleteDoc, addDoc, setDoc } from 'firebase/firestore';
 import { motion } from 'motion/react';
 import { 
   Users, 
@@ -18,10 +19,13 @@ import {
   Type,
   FileText,
   Users as UsersIcon,
-  Layers
+  Layers,
+  AlertTriangle,
+  Clock,
+  ArrowUpRight,
 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { Registration, Event, OperationType } from '../types';
+import { Registration, Event, OperationType, Stats } from '../types';
 import { GlassCard, PremiumButton } from '../components/ui/PremiumComponents';
 import { handleFirestoreError } from '../lib/utils';
 
@@ -30,9 +34,13 @@ export default function AdminPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [eventSearchTerm, setEventSearchTerm] = useState('');
   const [scanId, setScanId] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [eventFilter, setEventFilter] = useState<'ALL' | 'ACTIVE' | 'UPCOMING' | 'COMPLETED'>('ALL');
+  const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
   
   const [eventForm, setEventForm] = useState({
     title: '',
@@ -42,26 +50,38 @@ export default function AdminPage() {
     category: 'TECH_FEST',
     speakers: '',
     capacity: 100,
-    imageUrl: ''
+    imageUrl: '',
+    startDate: '',
+    endDate: ''
   });
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const regSnap = await getDocs(query(collection(db, 'registrations'), orderBy('registeredAt', 'desc')));
-      setRegistrations(regSnap.docs.map(d => ({ id: d.id, ...d.data() } as Registration)));
-      
-      const eventSnap = await getDocs(collection(db, 'events'));
-      setEvents(eventSnap.docs.map(d => ({ id: d.id, ...d.data() } as Event)));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.LIST, 'registrations');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchData();
+    const qReg = query(collection(db, 'registrations'), orderBy('registeredAt', 'desc'));
+    const unsubReg = onSnapshot(qReg, (snapshot) => {
+      setRegistrations(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Registration)));
+      setLoading(false);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'registrations'));
+
+    const qEvents = collection(db, 'events');
+    const unsubEvents = onSnapshot(qEvents, (snapshot) => {
+      const eventData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Event));
+      setEvents(eventData);
+      
+      // Sync stats when events change
+      const now = Date.now();
+      const stats: Stats = {
+        totalEvents: eventData.length,
+        liveEvents: eventData.filter(e => e.startDate && e.endDate && now >= e.startDate && now <= e.endDate).length,
+        completedEvents: eventData.filter(e => e.endDate && now > e.endDate).length,
+        totalUsers: 100, // Placeholder or fetch from users collection
+      };
+      setDoc(doc(db, 'stats', 'overall'), stats).catch(console.error);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'events'));
+
+    return () => {
+      unsubReg();
+      unsubEvents();
+    };
   }, []);
 
   const toggleAttendance = async (reg: Registration) => {
@@ -72,7 +92,6 @@ export default function AdminPage() {
         status: newStatus,
         attendedAt: newStatus === 'attended' ? Date.now() : null
       });
-      fetchData();
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `registrations/${reg.id}`);
     }
@@ -82,7 +101,6 @@ export default function AdminPage() {
     if (!confirm('Are you sure you want to remove this registration?')) return;
     try {
       await deleteDoc(doc(db, 'registrations', id));
-      fetchData();
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `registrations/${id}`);
     }
@@ -91,8 +109,6 @@ export default function AdminPage() {
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!scanId.trim()) return;
-    
-    // Check if registration exists
     const reg = registrations.find(r => r.id === scanId);
     if (reg) {
       await toggleAttendance(reg);
@@ -103,78 +119,85 @@ export default function AdminPage() {
     }
   };
 
-  const filteredRegistrations = registrations.filter(r => 
-    r.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.id.includes(searchTerm)
-  );
-
-  // Helper to get event name
-  const getEventName = (eventId: string) => {
-    return events.find(e => e.id === eventId)?.title || 'Event Removed';
-  };
-
-  const createDummyEvent = async () => {
-    const newEvent: Omit<Event, 'id'> = {
-      title: 'Global Tech Summit 2026',
-      description: 'The premier gathering for developers, designers, and tech enthusiasts. Experience 3 days of intensive workshops, keynote speeches from industry leaders, and networking opportunities that will shape the next decade of innovation. Join us at the Intersection of humanity and technology.',
-      date: 'Oct 12-14, 2026',
-      venue: 'Nexus Convention Center, Silicon Valley',
-      category: 'TECH_FEST',
-      speakers: ['Elena Rodriguez', 'David Chen', 'Sarah Jenkins'],
-      capacity: 500,
-      registeredCount: 0,
-      imageUrl: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?q=80&w=2070&auto=format&fit=crop'
-    };
-    try {
-      await addDoc(collection(db, 'events'), newEvent);
-      fetchData();
-    } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'events');
-    }
-  };
-
   const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newEvent: Omit<Event, 'id'> = {
+    const newEvent = {
       ...eventForm,
       speakers: eventForm.speakers.split(',').map(s => s.trim()).filter(Boolean),
       registeredCount: 0,
+      startDate: new Date(eventForm.startDate).getTime(),
+      endDate: new Date(eventForm.endDate).getTime(),
     };
     
     try {
       await addDoc(collection(db, 'events'), newEvent);
       setIsModalOpen(false);
       setEventForm({
-        title: '',
-        description: '',
-        date: '',
-        venue: '',
-        category: 'TECH_FEST',
-        speakers: '',
-        capacity: 100,
-        imageUrl: ''
+        title: '', description: '', date: '', venue: '', category: 'TECH_FEST',
+        speakers: '', capacity: 100, imageUrl: '', startDate: '', endDate: ''
       });
-      fetchData();
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'events');
     }
   };
 
-  if (loading) return <div className="pt-32 text-center text-white/40">Loading Command Center...</div>;
+  const deleteEvent = async () => {
+    if (!eventToDelete) return;
+    try {
+      await deleteDoc(doc(db, 'events', eventToDelete.id));
+      setIsDeleteModalOpen(false);
+      setEventToDelete(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `events/${eventToDelete.id}`);
+    }
+  };
+
+  const getEventStatus = (event: Event) => {
+    const now = Date.now();
+    if (!event.startDate || !event.endDate) return 'UPCOMING';
+    if (now >= event.startDate && now <= event.endDate) return 'ACTIVE';
+    if (now > event.endDate) return 'COMPLETED';
+    return 'UPCOMING';
+  };
+
+  const filteredEvents = events.filter(e => {
+    const status = getEventStatus(e);
+    const matchesFilter = eventFilter === 'ALL' || status === eventFilter;
+    const matchesSearch = e.title.toLowerCase().includes(eventSearchTerm.toLowerCase());
+    return matchesFilter && matchesSearch;
+  });
+
+  const activeEventsCount = events.filter(e => getEventStatus(e) === 'ACTIVE').length;
+  const filteredRegistrations = registrations.filter(r => 
+    r.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.id.includes(searchTerm)
+  );
+
+  const getEventName = (eventId: string) => {
+    return events.find(e => e.id === eventId)?.title || 'Event Removed';
+  };
+
+  if (loading) return <div className="pt-32 text-center text-white/40 font-black uppercase tracking-[0.4em]">Acquiring Control Stream...</div>;
 
   return (
     <div className="pt-24 pb-20 px-6 max-w-7xl mx-auto">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
         <div>
-          <h1 className="text-4xl font-bold mb-2">Admin Command Center</h1>
-          <p className="text-white/50 text-sm">System integrity: Optimal. Active registrations: {registrations.length}</p>
+          <h1 className="text-4xl font-black uppercase tracking-tight mb-2">Admin Command Center</h1>
+          <div className="flex items-center gap-6">
+            <p className="text-white/50 text-[10px] font-black uppercase tracking-widest">System integrity: Optimal</p>
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${activeEventsCount > 0 ? 'bg-green-500 animate-pulse' : 'bg-gray-700'}`} />
+              <span className="text-[10px] font-black uppercase tracking-widest text-white/80">Active Events: {activeEventsCount}</span>
+            </div>
+            <p className="text-white/50 text-[10px] font-black uppercase tracking-widest border-l border-white/10 pl-6">Active registrations: {registrations.length}</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
-           <PremiumButton variant="outline" size="sm" onClick={() => setIsModalOpen(true)}>
+           <PremiumButton variant="outline" size="sm" onClick={() => setIsModalOpen(true)} title="Initialize New Event Protocol">
               <Plus size={18} className="mr-2" /> Add Event
            </PremiumButton>
-           <PremiumButton size="sm" onClick={fetchData}>Sync</PremiumButton>
         </div>
       </header>
 
@@ -195,6 +218,7 @@ export default function AdminPage() {
                 <button 
                   onClick={() => setIsModalOpen(false)}
                   className="p-3 hover:bg-white/5 rounded-full transition-colors text-gray-500 hover:text-white"
+                  title="Close Deletion Module"
                 >
                   <X size={20} />
                 </button>
@@ -235,7 +259,7 @@ export default function AdminPage() {
 
                     <div className="space-y-4">
                       <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
-                        <Calendar size={12} className="text-[#00E5FF]" /> Date Info
+                        <Calendar size={12} className="text-[#00E5FF]" /> Display Date Info
                       </label>
                       <input 
                         required
@@ -244,6 +268,32 @@ export default function AdminPage() {
                         onChange={e => setEventForm({...eventForm, date: e.target.value})}
                         placeholder="MAY 12 — OCT 24, 2026"
                         className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#00E5FF]/50 transition-all placeholder:text-gray-800 uppercase"
+                      />
+                    </div>
+
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
+                        <Clock size={12} className="text-[#9D4EDD]" /> Data Sync Start
+                      </label>
+                      <input 
+                        required
+                        type="datetime-local"
+                        value={eventForm.startDate}
+                        onChange={e => setEventForm({...eventForm, startDate: e.target.value})}
+                        className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#9D4EDD]/50 transition-all uppercase"
+                      />
+                    </div>
+
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
+                        <Clock size={12} className="text-[#00E5FF]" /> Data Sync End
+                      </label>
+                      <input 
+                        required
+                        type="datetime-local"
+                        value={eventForm.endDate}
+                        onChange={e => setEventForm({...eventForm, endDate: e.target.value})}
+                        className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#00E5FF]/50 transition-all uppercase"
                       />
                     </div>
 
@@ -326,11 +376,156 @@ export default function AdminPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        {/* Left: Scan & Stats */}
-        <div className="space-y-6">
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && eventToDelete && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md"
+          >
+            <GlassCard className="border-red-500/30">
+              <div className="flex items-center gap-4 text-red-500 mb-6">
+                 <AlertTriangle size={32} />
+                 <div>
+                    <h3 className="text-xl font-black uppercase tracking-tight">Confirm Deletion</h3>
+                    <p className="text-[10px] font-bold opacity-50 uppercase tracking-widest">Protocol Removal Request</p>
+                 </div>
+              </div>
+
+              <p className="text-gray-400 text-sm mb-8 leading-relaxed font-black uppercase tracking-tight">
+                Are you sure you want to delete this event?
+              </p>
+
+              <div className="flex gap-4">
+                <PremiumButton 
+                 variant="outline" 
+                 className="flex-1 border-red-500/20 hover:bg-red-500/10 text-red-500"
+                 onClick={deleteEvent}
+                >
+                  Confirm
+                </PremiumButton>
+                <PremiumButton 
+                  variant="ghost"
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="flex-1 border-white/5"
+                >
+                  Cancel
+                </PremiumButton>
+              </div>
+            </GlassCard>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Main Grid: Events & Registrations */}
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-12">
+        {/* Events Management Section */}
+        <div className="xl:col-span-4 space-y-8">
+           <div className="flex flex-col lg:flex-row items-end justify-between gap-8">
+              <div className="w-full lg:w-2/3">
+                 <div className="protocol-label">Deployment / Active Protocols</div>
+                 <h2 className="text-display leading-tight">Events Hub.</h2>
+              </div>
+              
+              <div className="w-full lg:w-1/3 space-y-4">
+                 <div className="flex flex-wrap gap-2 justify-end">
+                    {['ALL', 'ACTIVE', 'UPCOMING', 'COMPLETED'].map(f => (
+                       <button
+                         key={f}
+                         onClick={() => setEventFilter(f as any)}
+                         className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ${
+                           eventFilter === f 
+                             ? 'bg-[#9D4EDD] text-white shadow-[0_0_15px_rgba(157,78,221,0.3)]' 
+                             : 'bg-white/5 text-gray-500 hover:bg-white/10'
+                         }`}
+                       >
+                         {f}
+                       </button>
+                    ))}
+                 </div>
+                 <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
+                    <input 
+                      type="text"
+                      placeholder="SEARCH_PROTOCOLS..."
+                      value={eventSearchTerm}
+                      onChange={e => setEventSearchTerm(e.target.value)}
+                      className="w-full bg-[#1E1642]/30 border border-white/5 rounded-xl py-4 pl-12 pr-6 text-[10px] font-mono tracking-[0.2em] focus:outline-none focus:border-[#9D4EDD]/30 transition-all placeholder:text-gray-800 uppercase"
+                    />
+                 </div>
+              </div>
+           </div>
+
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {filteredEvents.map(event => {
+                const status = getEventStatus(event);
+                return (
+                  <motion.div layout key={event.id}>
+                    <GlassCard className="p-6 h-full border-white/5 hover:border-[#9D4EDD]/20 transition-all group overflow-hidden">
+                       <div className="flex items-start justify-between mb-6">
+                          <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
+                            status === 'ACTIVE' ? 'bg-green-500/20 text-green-500 animate-pulse' :
+                            status === 'UPCOMING' ? 'bg-[#00E5FF]/20 text-[#00E5FF]' :
+                            'bg-gray-800 text-gray-500'
+                          }`}>
+                            {status === 'ACTIVE' ? 'LIVE_NOW' : status}
+                          </div>
+                          <button 
+                             onClick={() => {
+                               setEventToDelete(event);
+                               setIsDeleteModalOpen(true);
+                             }}
+                             className="p-2 rounded-lg bg-red-500/5 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 transition-all"
+                             title="Purge Event Protocol"
+                          >
+                             <Trash2 size={14} />
+                          </button>
+                       </div>
+
+                       <h3 className="text-xl font-black uppercase tracking-tight mb-4 line-clamp-1 group-hover:text-[#9D4EDD] transition-colors">{event.title}</h3>
+                       
+                       <div className="space-y-2 mb-6">
+                          <div className="flex items-center gap-2 text-[10px] text-gray-500 font-mono tracking-tight uppercase">
+                             <Calendar size={12} className="text-[#9D4EDD]" /> {event.date}
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-gray-500 font-mono tracking-tight uppercase">
+                             <UsersIcon size={12} className="text-[#00E5FF]" /> {event.registeredCount} / {event.capacity} Nodes
+                          </div>
+                       </div>
+
+                       <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+                          <div className="flex -space-x-1">
+                             {[1,2,3].map(i => (
+                                <div key={i} className="w-6 h-6 rounded-full border border-[#1E1642] bg-gray-900" />
+                             ))}
+                          </div>
+                          <Link to={`/events/${event.id}`}>
+                             <PremiumButton variant="ghost" size="sm" className="!p-0 h-auto hover:text-[#00E5FF]">
+                               Details <ArrowUpRight size={12} className="ml-1" />
+                             </PremiumButton>
+                          </Link>
+                       </div>
+                    </GlassCard>
+                  </motion.div>
+                );
+              })}
+              {filteredEvents.length === 0 && (
+                <div className="col-span-full text-center py-20 bg-white/[0.02] rounded-3xl border border-dashed border-white/5">
+                   <p className="text-gray-600 font-black uppercase tracking-[0.3em] text-[10px]">No events detected in current filter</p>
+                </div>
+              )}
+           </div>
+        </div>
+
+        {/* Separator */}
+        <div className="xl:col-span-4 h-px bg-white/5 my-4" />
+
+        {/* Attendance Scan & Stats */}
+        <div className="space-y-8">
+           <div className="protocol-label">Logistics / Attendance</div>
            <GlassCard>
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2" title="Biometric/QR Verification Source">
                 <Scan size={20} className="text-indigo-400" /> Verify Pass
               </h3>
               <form onSubmit={handleScan} className="space-y-3">
@@ -376,12 +571,14 @@ export default function AdminPage() {
                  <button 
                   onClick={() => setViewMode('list')}
                   className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-indigo-500 text-white' : 'text-white/40'}`}
+                  title="List View Protocol"
                  >
                     <List size={18} />
                  </button>
                  <button 
                   onClick={() => setViewMode('grid')}
                   className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-indigo-500 text-white' : 'text-white/40'}`}
+                  title="Grid View Protocol"
                  >
                     <LayoutGrid size={18} />
                  </button>
@@ -413,6 +610,7 @@ export default function AdminPage() {
                        <button 
                          onClick={() => deleteRegistration(reg.id)}
                          className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20"
+                         title="Purge Attendance Record"
                        >
                           <Trash2 size={18} />
                        </button>
