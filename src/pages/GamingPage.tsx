@@ -19,7 +19,7 @@ import {
   Rocket
 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Tournament, Match } from '../types';
 import { GlassCard, PremiumButton } from '../components/ui/PremiumComponents';
 import { useAuth } from '../context/AuthContext';
@@ -36,12 +36,16 @@ export default function GamingPage() {
     // Only fetch live data, no automatic seeding to prevent restoring unwanted data
     const unsubTournaments = onSnapshot(collection(db, 'tournaments'), (snapshot) => {
       setTournaments(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Tournament)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'tournaments');
     });
 
     const qMatches = query(collection(db, 'matches'), orderBy('scheduledAt', 'asc'), limit(20));
     const unsubMatches = onSnapshot(qMatches, (snapshot) => {
       setMatches(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Match)));
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'matches');
     });
 
     return () => {

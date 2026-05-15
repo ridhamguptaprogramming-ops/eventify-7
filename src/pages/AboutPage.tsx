@@ -4,7 +4,7 @@ import { Shield, Zap, Sparkles, Globe, Cpu, Users, Linkedin, Github, ExternalLin
 import { GlassCard, PremiumButton } from '../components/ui/PremiumComponents';
 import { Link } from 'react-router-dom';
 import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { TeamMember } from '../types';
 
 export default function AboutPage() {
@@ -94,6 +94,8 @@ export default function AboutPage() {
         setTeam(members);
       }
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'team');
     });
 
     return () => unsub();

@@ -15,7 +15,7 @@ export interface UserProfile {
   kdRatio?: number;
   matchesPlayed?: number;
   attendanceStatus?: 'pending' | 'verified';
-  createdAt: number;
+  createdAt: any;
 }
 
 export interface Event {
@@ -40,8 +40,8 @@ export interface Registration {
   userEmail: string;
   userName: string;
   status: 'registered' | 'attended';
-  registeredAt: number;
-  attendedAt?: number;
+  registeredAt: any;
+  attendedAt?: any;
 }
 
 export interface TeamMember {
@@ -80,7 +80,7 @@ export interface Team {
   members: string[];
   logoUrl: string;
   tournamentId: string;
-  createdAt: number;
+  createdAt: any;
 }
 
 export interface Match {
