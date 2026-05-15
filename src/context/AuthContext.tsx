@@ -38,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             email: user.email || '',
             displayName: user.displayName || 'Guest',
             role: user.email === 'ridham.gupta.programming@gmail.com' ? UserRole.ADMIN : UserRole.USER,
+            status: 'active',
             createdAt: Date.now(),
           };
           await setDoc(profileRef, newProfile);

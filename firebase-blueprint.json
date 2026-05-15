@@ -8,7 +8,13 @@
         "uid": { "type": "string" },
         "email": { "type": "string" },
         "displayName": { "type": "string" },
-        "role": { "type": "string", "enum": ["user", "admin"] },
+        "gamerTag": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin", "moderator"] },
+        "status": { "type": "string", "enum": ["active", "banned"] },
+        "rank": { "type": "string" },
+        "kdRatio": { "type": "number" },
+        "matchesPlayed": { "type": "number" },
+        "attendanceStatus": { "type": "string", "enum": ["pending", "verified"] },
         "createdAt": { "type": "number" }
       },
       "required": ["uid", "email", "displayName", "role", "createdAt"]
@@ -71,6 +77,52 @@
         "completedEvents": { "type": "number" },
         "totalUsers": { "type": "number" }
       }
+    },
+    "Tournament": {
+      "title": "Tournament",
+      "description": "Esports tournament details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "gameName": { "type": "string" },
+        "prizePool": { "type": "string" },
+        "startDate": { "type": "number" },
+        "registeredTeamsCount": { "type": "number" },
+        "bannerImage": { "type": "string" },
+        "teamSize": { "type": "number" },
+        "entryFee": { "type": "string" },
+        "status": { "type": "string", "enum": ["upcoming", "live", "completed"] }
+      }
+    },
+    "Team": {
+      "title": "Team",
+      "description": "Esports team registration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "teamName": { "type": "string" },
+        "captainId": { "type": "string" },
+        "members": { "type": "array", "items": { "type": "string" } },
+        "logoUrl": { "type": "string" },
+        "tournamentId": { "type": "string" },
+        "createdAt": { "type": "number" }
+      }
+    },
+    "Match": {
+      "title": "Match",
+      "description": "Tournament match details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tournamentId": { "type": "string" },
+        "teamA": { "type": "object" },
+        "teamB": { "type": "object" },
+        "scoreA": { "type": "number" },
+        "scoreB": { "type": "number" },
+        "winnerId": { "type": "string" },
+        "matchStatus": { "type": "string", "enum": ["upcoming", "live", "completed"] },
+        "scheduledAt": { "type": "number" }
+      }
     }
   },
   "firestore": {
@@ -93,6 +145,18 @@
     "stats/{statsId}": {
       "schema": "Stats",
       "description": "System-wide metrics"
+    },
+    "tournaments/{tournamentId}": {
+      "schema": "Tournament",
+      "description": "Esports tournaments"
+    },
+    "teams/{teamId}": {
+      "schema": "Team",
+      "description": "Tournament teams"
+    },
+    "matches/{matchId}": {
+      "schema": "Match",
+      "description": "Tournament matches"
     }
   }
 }

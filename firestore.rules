@@ -26,6 +26,13 @@ service cloud.firestore {
       );
     }
 
+    function isModerator() {
+       return isSignedIn() && (
+         isAdmin() ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'moderator'
+       );
+    }
+
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
@@ -33,18 +40,16 @@ service cloud.firestore {
     // User Profile Rules
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow list: if isAdmin();
+      allow list: if isAdmin() || isModerator();
       allow create: if isOwner(userId) && isValidUserProfile(request.resource.data);
-      allow update: if isOwner(userId) && isValidUserProfile(request.resource.data) && (
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
-      ) || isAdmin();
+      allow update: if (isOwner(userId) && isValidUserProfile(request.resource.data)) || isAdmin() || isModerator();
     }
 
     function isValidUserProfile(data) {
       return data.uid is string && data.uid.size() <= 128 &&
              data.email is string && data.email.size() <= 256 &&
              data.displayName is string && data.displayName.size() <= 100 &&
-             data.role in ['user', 'admin'] &&
+             data.role in ['user', 'admin', 'moderator'] &&
              data.createdAt is number;
     }
 
@@ -113,5 +118,24 @@ service cloud.firestore {
              (!('linkedinUrl' in data) || (data.linkedinUrl is string && data.linkedinUrl.size() <= 1000)) &&
              (!('githubUrl' in data) || (data.githubUrl is string && data.githubUrl.size() <= 1000));
     }
+
+    // Gaming Rules
+    match /tournaments/{tournamentId} {
+      allow read: if true;
+      allow write: if isAdmin() || isModerator();
+    }
+
+    match /teams/{teamId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.captainId == request.auth.uid;
+      allow update: if isAdmin() || isModerator() || (isSignedIn() && resource.data.captainId == request.auth.uid);
+      allow delete: if isAdmin() || isModerator();
+    }
+
+    match /matches/{matchId} {
+      allow read: if true;
+      allow write: if isAdmin() || isModerator();
+    }
+
   }
 }

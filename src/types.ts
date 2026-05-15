@@ -1,13 +1,20 @@
 export enum UserRole {
   USER = 'user',
   ADMIN = 'admin',
+  MODERATOR = 'moderator',
 }
 
 export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
+  gamerTag?: string;
   role: UserRole;
+  status: 'active' | 'banned';
+  rank?: string;
+  kdRatio?: number;
+  matchesPlayed?: number;
+  attendanceStatus?: 'pending' | 'verified';
   createdAt: number;
 }
 
@@ -52,6 +59,40 @@ export interface Stats {
   liveEvents: number;
   completedEvents: number;
   totalUsers: number;
+}
+
+export interface Tournament {
+  id: string;
+  gameName: string;
+  prizePool: string;
+  startDate: number;
+  registeredTeamsCount: number;
+  bannerImage: string;
+  teamSize: number;
+  entryFee: string;
+  status: 'upcoming' | 'live' | 'completed';
+}
+
+export interface Team {
+  id: string;
+  teamName: string;
+  captainId: string;
+  members: string[];
+  logoUrl: string;
+  tournamentId: string;
+  createdAt: number;
+}
+
+export interface Match {
+  id: string;
+  tournamentId: string;
+  teamA: { id: string; name: string; logo?: string };
+  teamB: { id: string; name: string; logo?: string };
+  scoreA: number;
+  scoreB: number;
+  winnerId?: string;
+  matchStatus: 'upcoming' | 'live' | 'completed';
+  scheduledAt: number;
 }
 
 export enum OperationType {

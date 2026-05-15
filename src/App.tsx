@@ -16,14 +16,16 @@ import AdminPage from './pages/AdminPage';
 import EventDetailsPage from './pages/EventDetailsPage';
 import AboutPage from './pages/AboutPage';
 import HighlightsPage from './pages/HighlightsPage';
+import GamingPage from './pages/GamingPage';
+import GamingAdminPage from './pages/GamingAdminPage';
 import { UserRole } from './types';
 
-function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode, adminOnly?: boolean }) {
+function ProtectedRoute({ children, requiredRoles }: { children: React.ReactNode, requiredRoles?: UserRole[] }) {
   const { user, profile, loading } = useAuth();
   
   if (loading) return null; // Or skeleton
   if (!user) return <Navigate to="/login" />;
-  if (adminOnly && profile?.role !== UserRole.ADMIN) return <Navigate to="/" />;
+  if (requiredRoles && !requiredRoles.includes(profile?.role as UserRole)) return <Navigate to="/" />;
   
   return <>{children}</>;
 }
@@ -38,6 +40,12 @@ function PageRoutes() {
             <Route path="/" element={<LandingPage />} />
             <Route path="/highlights" element={<HighlightsPage />} />
             <Route path="/about" element={<AboutPage />} />
+            <Route path="/gaming" element={<GamingPage />} />
+            <Route path="/gaming/admin" element={
+              <ProtectedRoute requiredRoles={[UserRole.ADMIN, UserRole.MODERATOR]}>
+                <GamingAdminPage />
+              </ProtectedRoute>
+            } />
             <Route path="/login" element={<RegistrationPage />} />
             <Route path="/events/:id?" element={<EventDetailsPage />} />
             <Route 
@@ -51,7 +59,7 @@ function PageRoutes() {
             <Route 
               path="/admin" 
               element={
-                <ProtectedRoute adminOnly>
+                <ProtectedRoute requiredRoles={[UserRole.ADMIN]}>
                   <AdminPage />
                 </ProtectedRoute>
               } 

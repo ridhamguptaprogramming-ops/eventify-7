@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   Clock,
   ArrowUpRight,
+  Gamepad2,
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { Registration, Event, OperationType, Stats } from '../types';
@@ -195,6 +196,11 @@ export default function AdminPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+           <Link to="/gaming/admin">
+              <PremiumButton variant="outline" size="sm" className="border-[#00E5FF]/30 text-[#00E5FF] hover:bg-[#00E5FF]/10">
+                 <Gamepad2 size={18} className="mr-2" /> Gaming Admin
+              </PremiumButton>
+           </Link>
            <PremiumButton variant="outline" size="sm" onClick={() => setIsModalOpen(true)} title="Initialize New Event Protocol">
               <Plus size={18} className="mr-2" /> Add Event
            </PremiumButton>

@@ -13,6 +13,7 @@ export function Navbar() {
   const navLinks = [
     { path: '/events', label: 'Calendar', sub: 'Schedule' },
     { path: '/highlights', label: 'Highlights', sub: 'Archive' },
+    { path: '/gaming', label: 'Gaming', sub: 'Arena' },
     { path: '/about', label: 'Experience', sub: 'About' },
   ];
 
@@ -24,16 +25,16 @@ export function Navbar() {
     <motion.nav 
       initial={{ y: -100 }}
       animate={{ y: 0 }}
-      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-12 py-8 bg-[#0F0A1F]/50 backdrop-blur-md border-b border-white/5"
+      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-4 bg-[#0F0A1F]/50 backdrop-blur-md border-b border-white/5"
     >
       <Link to="/" className="flex items-center gap-3 group">
-        <div className="w-10 h-10 bg-[#9D4EDD] flex items-center justify-center rounded-xl group-hover:rotate-12 transition-transform shadow-[0_0_20px_rgba(157,78,221,0.4)]">
-          <Zap className="text-white fill-current" size={20} />
+        <div className="w-8 h-8 bg-[#9D4EDD] flex items-center justify-center rounded-lg group-hover:rotate-12 transition-transform shadow-[0_0_20px_rgba(157,78,221,0.4)]">
+          <Zap className="text-white fill-current" size={16} />
         </div>
-        <span className="text-xl font-black tracking-tighter uppercase tracking-[-0.05em]">Event.Pulse</span>
+        <span className="text-lg font-black tracking-tighter uppercase tracking-[-0.05em]">Event.Pulse</span>
       </Link>
 
-      <div className="hidden md:flex items-center gap-12 text-[10px] font-black uppercase tracking-[0.2em]">
+      <div className="hidden md:flex items-center gap-8 text-[10px] font-black uppercase tracking-[0.2em]">
         {navLinks.map(link => (
           <Link 
             key={link.path}
@@ -52,12 +53,19 @@ export function Navbar() {
             )}
           </Link>
         ))}
-        {profile?.role === UserRole.ADMIN && (
-          <Link to="/admin" className="px-4 py-1.5 bg-[#9D4EDD]/10 border border-[#9D4EDD]/30 rounded-full text-[#9D4EDD] flex items-center gap-2 hover:bg-[#9D4EDD]/20 transition-colors">
-            <div className="w-1.5 h-1.5 bg-[#9D4EDD] rounded-full animate-pulse" />
-            ADMIN_CONTROL
-          </Link>
-        )}
+        <div className="flex items-center gap-4">
+          {profile?.role === UserRole.ADMIN && (
+            <Link to="/admin" className="px-4 py-1.5 bg-white/5 border border-white/10 rounded-full text-gray-400 flex items-center gap-2 hover:bg-white/10 transition-colors">
+              CORE_HUB
+            </Link>
+          )}
+          {(profile?.role === UserRole.ADMIN || profile?.role === UserRole.MODERATOR) && (
+            <Link to="/gaming/admin" className="px-4 py-1.5 bg-[#00E5FF]/10 border border-[#00E5FF]/30 rounded-full text-[#00E5FF] flex items-center gap-2 hover:bg-[#00E5FF]/20 transition-colors">
+              <div className="w-1.5 h-1.5 bg-[#00E5FF] rounded-full animate-pulse" />
+              CMD_TERMINAL
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center gap-6">
