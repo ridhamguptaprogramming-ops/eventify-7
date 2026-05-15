@@ -26,13 +26,20 @@ import {
   Gamepad2,
 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { Registration, Event, OperationType, Stats } from '../types';
+import { Registration, Event, OperationType, Stats, Tournament, Match, Highlight } from '../types';
 import { GlassCard, PremiumButton } from '../components/ui/PremiumComponents';
 import { handleFirestoreError } from '../lib/utils';
 
+type AdminTab = 'CORE_EVENTS' | 'GAMING_HUB' | 'HISTORY_LOG';
+
 export default function AdminPage() {
+  const [activeTab, setActiveTab] = useState<AdminTab>('CORE_EVENTS');
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [highlights, setHighlights] = useState<Highlight[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [eventSearchTerm, setEventSearchTerm] = useState('');
@@ -41,7 +48,7 @@ export default function AdminPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [eventFilter, setEventFilter] = useState<'ALL' | 'ACTIVE' | 'UPCOMING' | 'COMPLETED'>('ALL');
-  const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{ id: string; collection: string; title: string } | null>(null);
   
   const [eventForm, setEventForm] = useState({
     title: '',
@@ -57,33 +64,72 @@ export default function AdminPage() {
   });
 
   useEffect(() => {
+    // 1. Core Data
     const qReg = query(collection(db, 'registrations'), orderBy('registeredAt', 'desc'));
     const unsubReg = onSnapshot(qReg, (snapshot) => {
       setRegistrations(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Registration)));
       setLoading(false);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'registrations'));
 
-    const qEvents = collection(db, 'events');
-    const unsubEvents = onSnapshot(qEvents, (snapshot) => {
+    const unsubEvents = onSnapshot(collection(db, 'events'), (snapshot) => {
       const eventData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Event));
       setEvents(eventData);
-      
-      // Sync stats when events change
-      const now = Date.now();
-      const stats: Stats = {
-        totalEvents: eventData.length,
-        liveEvents: eventData.filter(e => e.startDate && e.endDate && now >= e.startDate && now <= e.endDate).length,
-        completedEvents: eventData.filter(e => e.endDate && now > e.endDate).length,
-        totalUsers: 100, // Placeholder or fetch from users collection
-      };
-      setDoc(doc(db, 'stats', 'overall'), stats).catch(console.error);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'events'));
+
+    // 2. Gaming Data
+    const unsubTournaments = onSnapshot(collection(db, 'tournaments'), (snapshot) => {
+      setTournaments(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Tournament)));
+    });
+
+    const unsubMatches = onSnapshot(collection(db, 'matches'), (snapshot) => {
+      setMatches(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Match)));
+    });
+
+    // 3. Highlights
+    const unsubHighlights = onSnapshot(collection(db, 'highlights'), (snapshot) => {
+      setHighlights(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Highlight)));
+    });
 
     return () => {
       unsubReg();
       unsubEvents();
+      unsubTournaments();
+      unsubMatches();
+      unsubHighlights();
     };
   }, []);
+
+  const deleteItem = async () => {
+    if (!itemToDelete) return;
+    try {
+      await deleteDoc(doc(db, itemToDelete.collection, itemToDelete.id));
+      setIsDeleteModalOpen(false);
+      setItemToDelete(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `${itemToDelete.collection}/${itemToDelete.id}`);
+    }
+  };
+
+  const archiveTournament = async (tournament: Tournament) => {
+    try {
+      const highlight: Omit<Highlight, 'id'> = {
+        sourceId: tournament.id,
+        type: 'TOURNAMENT',
+        title: tournament.gameName,
+        description: `Concluded gaming event with ${tournament.registeredTeamsCount} teams.`,
+        imageUrl: tournament.bannerImage,
+        completedAt: Date.now(),
+        stats: {
+          attendance: tournament.registeredTeamsCount,
+          score: tournament.prizePool
+        }
+      };
+      await addDoc(collection(db, 'highlights'), highlight);
+      await updateDoc(doc(db, 'tournaments', tournament.id), { status: 'completed' });
+    } catch (err) {
+      console.error('Archiving Error:', err);
+    }
+  };
 
   const toggleAttendance = async (reg: Registration) => {
     try {
@@ -142,17 +188,6 @@ export default function AdminPage() {
     }
   };
 
-  const deleteEvent = async () => {
-    if (!eventToDelete) return;
-    try {
-      await deleteDoc(doc(db, 'events', eventToDelete.id));
-      setIsDeleteModalOpen(false);
-      setEventToDelete(null);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `events/${eventToDelete.id}`);
-    }
-  };
-
   const getEventStatus = (event: Event) => {
     const now = Date.now();
     if (!event.startDate || !event.endDate) return 'UPCOMING';
@@ -169,6 +204,8 @@ export default function AdminPage() {
   });
 
   const activeEventsCount = events.filter(e => getEventStatus(e) === 'ACTIVE').length;
+  const gamingLiveCount = tournaments.filter(t => t.status === 'live').length;
+
   const filteredRegistrations = registrations.filter(r => 
     r.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     r.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -185,27 +222,340 @@ export default function AdminPage() {
     <div className="pt-24 pb-20 px-6 max-w-7xl mx-auto">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
         <div>
-          <h1 className="text-4xl font-black uppercase tracking-tight mb-2">Admin Command Center</h1>
-          <div className="flex items-center gap-6">
+          <h1 className="text-4xl font-black uppercase tracking-tight mb-2">Unified Admin Console</h1>
+          <div className="flex flex-wrap items-center gap-6">
             <p className="text-white/50 text-[10px] font-black uppercase tracking-widest">System integrity: Optimal</p>
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${activeEventsCount > 0 ? 'bg-green-500 animate-pulse' : 'bg-gray-700'}`} />
               <span className="text-[10px] font-black uppercase tracking-widest text-white/80">Active Events: {activeEventsCount}</span>
             </div>
-            <p className="text-white/50 text-[10px] font-black uppercase tracking-widest border-l border-white/10 pl-6">Active registrations: {registrations.length}</p>
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${gamingLiveCount > 0 ? 'bg-[#00E5FF] animate-pulse' : 'bg-gray-700'}`} />
+              <span className="text-[10px] font-black uppercase tracking-widest text-white/80">Gaming Now: {gamingLiveCount}</span>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-3">
-           <Link to="/gaming/admin">
-              <PremiumButton variant="outline" size="sm" className="border-[#00E5FF]/30 text-[#00E5FF] hover:bg-[#00E5FF]/10">
-                 <Gamepad2 size={18} className="mr-2" /> Gaming Admin
-              </PremiumButton>
-           </Link>
-           <PremiumButton variant="outline" size="sm" onClick={() => setIsModalOpen(true)} title="Initialize New Event Protocol">
-              <Plus size={18} className="mr-2" /> Add Event
-           </PremiumButton>
+           <div className="bg-white/5 border border-white/10 p-1 rounded-2xl flex">
+              {(['CORE_EVENTS', 'GAMING_HUB', 'HISTORY_LOG'] as AdminTab[]).map(tab => (
+                 <button
+                   key={tab}
+                   onClick={() => setActiveTab(tab)}
+                   className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                     activeTab === tab ? 'bg-[#9D4EDD] text-white shadow-lg' : 'text-gray-500 hover:text-white'
+                   }`}
+                 >
+                   {tab.replace('_', ' ')}
+                 </button>
+              ))}
+           </div>
+           {activeTab === 'CORE_EVENTS' && (
+             <PremiumButton variant="outline" size="sm" onClick={() => setIsModalOpen(true)}>
+                <Plus size={18} className="mr-2" /> Add Event
+             </PremiumButton>
+           )}
         </div>
       </header>
+
+      {/* Item Deletion Modal */}
+      {isDeleteModalOpen && itemToDelete && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md"
+          >
+            <GlassCard className="border-red-500/30">
+              <div className="flex items-center gap-4 text-red-500 mb-6">
+                 <AlertTriangle size={32} />
+                 <div>
+                    <h3 className="text-xl font-black uppercase tracking-tight">Purge Data Node</h3>
+                    <p className="text-[10px] font-bold opacity-50 uppercase tracking-widest">Protocol: {itemToDelete.collection}</p>
+                 </div>
+              </div>
+              <p className="text-gray-400 text-sm mb-8 leading-relaxed font-black uppercase tracking-tight">
+                Are you confirming the deletion of <span className="text-white">"{itemToDelete.title}"</span>? This action is irreversible.
+              </p>
+              <div className="flex gap-4">
+                <PremiumButton 
+                 variant="outline" 
+                 className="flex-1 border-red-500/20 hover:bg-red-500/10 text-red-500"
+                 onClick={deleteItem}
+                >
+                  Confirm Purge
+                </PremiumButton>
+                <PremiumButton 
+                  variant="ghost"
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="flex-1 border-white/5"
+                >
+                  Abort
+                </PremiumButton>
+              </div>
+            </GlassCard>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Sector Tabs Content */}
+      <div className="space-y-12">
+        {activeTab === 'CORE_EVENTS' && (
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-12">
+            <div className="xl:col-span-4 space-y-8">
+               <div className="flex flex-col lg:flex-row items-end justify-between gap-8">
+                  <div className="w-full lg:w-2/3">
+                     <div className="protocol-label">Deployment / Active Protocols</div>
+                     <h2 className="text-display leading-tight">Events Hub.</h2>
+                  </div>
+                  
+                  <div className="w-full lg:w-1/3 space-y-4">
+                     <div className="flex flex-wrap gap-2 justify-end">
+                        {['ALL', 'ACTIVE', 'UPCOMING', 'COMPLETED'].map(f => (
+                           <button
+                             key={f}
+                             onClick={() => setEventFilter(f as any)}
+                             className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ${
+                               eventFilter === f 
+                                 ? 'bg-[#9D4EDD] text-white' 
+                                 : 'bg-white/5 text-gray-500 hover:bg-white/10'
+                             }`}
+                           >
+                             {f}
+                           </button>
+                        ))}
+                     </div>
+                     <div className="relative">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
+                        <input 
+                          type="text"
+                          placeholder="SEARCH_PROTOCOLS..."
+                          value={eventSearchTerm}
+                          onChange={e => setEventSearchTerm(e.target.value)}
+                          className="w-full bg-[#1E1642]/30 border border-white/5 rounded-xl py-4 pl-12 pr-6 text-[10px] font-mono tracking-[0.2em] focus:outline-none focus:border-[#9D4EDD]/30 transition-all placeholder:text-gray-800 uppercase"
+                        />
+                     </div>
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {filteredEvents.map(event => (
+                    <motion.div layout key={event.id}>
+                      <GlassCard className="p-6 h-full border-white/5 hover:border-[#9D4EDD]/20 transition-all group overflow-hidden">
+                         <div className="flex items-start justify-between mb-6">
+                            <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
+                              getEventStatus(event) === 'ACTIVE' ? 'bg-green-500/20 text-green-500 animate-pulse' : 'bg-gray-800 text-gray-500'
+                            }`}>
+                              {getEventStatus(event)}
+                            </div>
+                            <button 
+                               onClick={() => {
+                                 setItemToDelete({ id: event.id, collection: 'events', title: event.title });
+                                 setIsDeleteModalOpen(true);
+                               }}
+                               className="p-2 rounded-lg bg-red-500/5 text-red-500/40 hover:text-red-500 hover:bg-red-500/10"
+                            >
+                               <Trash2 size={14} />
+                            </button>
+                         </div>
+                         <h3 className="text-xl font-black uppercase tracking-tight mb-4">{event.title}</h3>
+                         <div className="space-y-1 mb-6">
+                            <div className="text-[8px] font-black text-white/30 uppercase tracking-widest">Venue</div>
+                            <div className="text-[10px] text-gray-400 font-mono uppercase">{event.venue}</div>
+                         </div>
+                         <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                            <div className="text-[10px] text-[#9D4EDD] font-black uppercase tracking-widest">{event.registeredCount} NODES</div>
+                            <Link to={`/events/${event.id}`}>
+                               <ArrowUpRight size={14} className="text-white/20" />
+                            </Link>
+                         </div>
+                      </GlassCard>
+                    </motion.div>
+                  ))}
+               </div>
+            </div>
+
+            <div className="xl:col-span-1 space-y-8">
+               <div className="protocol-label">Logistics / Entry Scan</div>
+               <GlassCard className="!p-8">
+                  <form onSubmit={handleScan} className="space-y-6">
+                     <div className="relative">
+                        <Scan className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+                        <input 
+                          type="text" 
+                          value={scanId}
+                          onChange={e => setScanId(e.target.value)}
+                          placeholder="SCANNER_INPUT"
+                          className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-6 text-xs font-mono uppercase tracking-widest focus:outline-none focus:border-[#9D4EDD]"
+                        />
+                     </div>
+                     <PremiumButton className="w-full">Initialize Verification</PremiumButton>
+                  </form>
+               </GlassCard>
+            </div>
+
+            <div className="xl:col-span-3">
+               <div className="protocol-label mb-6">Transmission Log / Registrations</div>
+               <div className="space-y-4">
+                  {filteredRegistrations.slice(0, 10).map(reg => (
+                    <GlassCard key={reg.id} className="!p-4 border-white/5 flex items-center justify-between group">
+                       <div className="flex items-center gap-4">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${reg.status === 'attended' ? 'bg-green-500/20 text-green-500' : 'bg-white/5 text-white/20'}`}>
+                             {reg.status === 'attended' ? <CheckCircle size={14} /> : <Users size={14} />}
+                          </div>
+                          <div>
+                             <div className="text-[11px] font-black uppercase tracking-tight">{reg.userName}</div>
+                             <div className="text-[9px] text-white/30 font-mono">{reg.userEmail}</div>
+                          </div>
+                       </div>
+                       <div className="flex items-center gap-3">
+                          <button 
+                            onClick={() => toggleAttendance(reg)}
+                            className={`px-3 py-1 rounded text-[8px] font-black uppercase tracking-widest border transition-all ${
+                              reg.status === 'attended' ? 'border-amber-500/30 text-amber-500' : 'border-green-500/30 text-green-500'
+                            }`}
+                          >
+                             {reg.status === 'attended' ? 'REVERSE' : 'VERIFY'}
+                          </button>
+                          <button 
+                            onClick={() => deleteRegistration(reg.id)}
+                            className="p-1.5 text-white/10 hover:text-red-500 transition-colors"
+                          >
+                             <Trash2 size={14} />
+                          </button>
+                       </div>
+                    </GlassCard>
+                  ))}
+               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'GAMING_HUB' && (
+          <div className="space-y-12">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+               {tournaments.map(tournament => (
+                 <GlassCard key={tournament.id} className="group relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-[#00E5FF]/10 to-transparent pointer-events-none" />
+                    <div className="flex items-start justify-between mb-8">
+                       <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.2em] ${
+                         tournament.status === 'live' ? 'bg-red-500/20 text-red-500 animate-pulse' :
+                         tournament.status === 'completed' ? 'bg-gray-800 text-gray-500' : 'bg-[#00E5FF]/20 text-[#00E5FF]'
+                       }`}>
+                          {tournament.status}
+                       </div>
+                       <div className="flex gap-2">
+                          {tournament.status === 'live' && (
+                             <button 
+                               onClick={() => archiveTournament(tournament)}
+                               className="p-2 bg-white/5 rounded-lg text-gray-500 hover:text-[#00E5FF] transition-all"
+                               title="Archive to Highlights"
+                             >
+                                <ArrowUpRight size={14} />
+                             </button>
+                          )}
+                          <button 
+                             onClick={() => {
+                               setItemToDelete({ id: tournament.id, collection: 'tournaments', title: tournament.gameName });
+                               setIsDeleteModalOpen(true);
+                             }}
+                             className="p-2 bg-red-500/5 rounded-lg text-red-500/40 hover:text-red-500 transition-all"
+                          >
+                             <Trash2 size={14} />
+                          </button>
+                       </div>
+                    </div>
+                    <h3 className="text-3xl font-black italic uppercase tracking-tighter mb-2">{tournament.gameName}</h3>
+                    <div className="text-[9px] font-bold text-white/30 uppercase tracking-[0.3em] mb-8">Arena Protocol // {tournament.id}</div>
+                    
+                    <div className="grid grid-cols-2 gap-4 pt-6 border-t border-white/5">
+                       <div>
+                          <div className="text-[10px] font-black uppercase text-gray-500 mb-1">Prize Pool</div>
+                          <div className="text-sm font-black text-[#00E5FF]">{tournament.prizePool}</div>
+                       </div>
+                       <div>
+                          <div className="text-[10px] font-black uppercase text-gray-500 mb-1">Teams</div>
+                          <div className="text-sm font-black uppercase tracking-widest">{tournament.registeredTeamsCount} NODES</div>
+                       </div>
+                    </div>
+                 </GlassCard>
+               ))}
+            </div>
+
+            <div className="space-y-8">
+               <div className="protocol-label">Live Operation / Matches</div>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {matches.map(match => (
+                    <GlassCard key={match.id} className="!p-6 border-white/5 flex items-center justify-between">
+                       <div className="flex-1 flex items-center gap-6">
+                          <div className="text-center min-w-[80px]">
+                             <div className="text-[11px] font-black uppercase mb-2 truncate">{match.teamA.name}</div>
+                             <div className="text-2xl font-black">{match.scoreA}</div>
+                          </div>
+                          <div className="text-white/20 italic font-black text-xl">VS</div>
+                          <div className="text-center min-w-[80px]">
+                             <div className="text-[11px] font-black uppercase mb-2 truncate">{match.teamB.name}</div>
+                             <div className="text-2xl font-black">{match.scoreB}</div>
+                          </div>
+                       </div>
+                       <div className="flex flex-col items-end gap-4 ml-8">
+                          <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${match.matchStatus === 'live' ? 'bg-red-500/20 text-red-500' : 'bg-gray-800 text-gray-500'}`}>
+                             {match.matchStatus}
+                          </div>
+                          <button 
+                             onClick={() => {
+                               setItemToDelete({ id: match.id, collection: 'matches', title: `${match.teamA.name} VS ${match.teamB.name}` });
+                               setIsDeleteModalOpen(true);
+                             }}
+                             className="p-2 text-white/5 hover:text-red-500 transition-colors"
+                          >
+                             <Trash2 size={16} />
+                          </button>
+                       </div>
+                    </GlassCard>
+                  ))}
+               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'HISTORY_LOG' && (
+          <div className="space-y-12">
+            <div className="protocol-label">Static Archive / Highlights</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+               {highlights.map(highlight => (
+                 <motion.div layout key={highlight.id}>
+                    <GlassCard className="p-0 overflow-hidden group">
+                       <div className="h-32 bg-gray-900 relative">
+                          <img src={highlight.imageUrl} className="w-full h-full object-cover opacity-50 grayscale group-hover:grayscale-0 group-hover:opacity-100 transition-all" alt="" />
+                          <button 
+                             onClick={() => {
+                               setItemToDelete({ id: highlight.id, collection: 'highlights', title: highlight.title });
+                               setIsDeleteModalOpen(true);
+                             }}
+                             className="absolute top-2 right-2 p-2 bg-black/60 rounded-lg text-white/40 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                          >
+                             <Trash2 size={14} />
+                          </button>
+                       </div>
+                       <div className="p-6">
+                          <div className="text-[8px] font-black text-[#9D4EDD] uppercase tracking-widest mb-1">{highlight.type}</div>
+                          <h4 className="text-sm font-black uppercase tracking-tight mb-4">{highlight.title}</h4>
+                          <div className="text-[10px] font-mono text-gray-500 uppercase">
+                             {new Date(highlight.completedAt).toLocaleDateString()}
+                          </div>
+                       </div>
+                    </GlassCard>
+                 </motion.div>
+               ))}
+               {highlights.length === 0 && (
+                 <div className="col-span-full py-32 text-center border-2 border-dashed border-white/5 rounded-3xl">
+                    <p className="text-gray-600 font-black uppercase tracking-widest text-xs italic">Historical database empty</p>
+                 </div>
+               )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Add Event Modal */}
       {isModalOpen && (
@@ -224,7 +574,6 @@ export default function AdminPage() {
                 <button 
                   onClick={() => setIsModalOpen(false)}
                   className="p-3 hover:bg-white/5 rounded-full transition-colors text-gray-500 hover:text-white"
-                  title="Close Deletion Module"
                 >
                   <X size={20} />
                 </button>
@@ -234,143 +583,49 @@ export default function AdminPage() {
                 <form onSubmit={handleAddEvent} className="space-y-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
-                        <Type size={12} className="text-[#00E5FF]" /> Event Title
-                      </label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Event Title</label>
                       <input 
                         required
                         type="text"
                         value={eventForm.title}
                         onChange={e => setEventForm({...eventForm, title: e.target.value})}
-                        placeholder="ALPHA_PROTOCOL_26"
-                        className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#00E5FF]/50 transition-all placeholder:text-gray-800 uppercase"
+                        className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#00E5FF]/50 transition-all uppercase"
                       />
                     </div>
-
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
-                        <Layers size={12} className="text-[#9D4EDD]" /> Category
-                      </label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Category</label>
                       <select 
                         value={eventForm.category}
                         onChange={e => setEventForm({...eventForm, category: e.target.value})}
                         className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#9D4EDD]/50 transition-all uppercase"
                       >
-                        <option value="TECH_FEST" className="bg-[#0F0A1F]">TECH_FEST</option>
-                        <option value="WORKSHOP" className="bg-[#0F0A1F]">WORKSHOP</option>
-                        <option value="SUMMIT" className="bg-[#0F0A1F]">SUMMIT</option>
-                        <option value="HACKATHON" className="bg-[#0F0A1F]">HACKATHON</option>
+                        <option value="TECH_FEST">TECH_FEST</option>
+                        <option value="WORKSHOP">WORKSHOP</option>
+                        <option value="SUMMIT">SUMMIT</option>
+                        <option value="HACKATHON">HACKATHON</option>
                       </select>
                     </div>
-
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
-                        <Calendar size={12} className="text-[#00E5FF]" /> Display Date Info
-                      </label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Date Info</label>
                       <input 
                         required
                         type="text"
                         value={eventForm.date}
                         onChange={e => setEventForm({...eventForm, date: e.target.value})}
-                        placeholder="MAY 12 — OCT 24, 2026"
-                        className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#00E5FF]/50 transition-all placeholder:text-gray-800 uppercase"
-                      />
-                    </div>
-
-                    <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
-                        <Clock size={12} className="text-[#9D4EDD]" /> Data Sync Start
-                      </label>
-                      <input 
-                        required
-                        type="datetime-local"
-                        value={eventForm.startDate}
-                        onChange={e => setEventForm({...eventForm, startDate: e.target.value})}
-                        className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#9D4EDD]/50 transition-all uppercase"
-                      />
-                    </div>
-
-                    <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
-                        <Clock size={12} className="text-[#00E5FF]" /> Data Sync End
-                      </label>
-                      <input 
-                        required
-                        type="datetime-local"
-                        value={eventForm.endDate}
-                        onChange={e => setEventForm({...eventForm, endDate: e.target.value})}
                         className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#00E5FF]/50 transition-all uppercase"
                       />
                     </div>
-
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
-                        <MapPin size={12} className="text-[#9D4EDD]" /> Nexus Point
-                      </label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Venue</label>
                       <input 
                         required
                         type="text"
                         value={eventForm.venue}
                         onChange={e => setEventForm({...eventForm, venue: e.target.value})}
-                        placeholder="GLOBAL_TECH_PAVILION"
-                        className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#9D4EDD]/50 transition-all placeholder:text-gray-800 uppercase"
-                      />
-                    </div>
-
-                    <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
-                        <UsersIcon size={12} className="text-[#00E5FF]" /> Speakers (CSV)
-                      </label>
-                      <input 
-                        type="text"
-                        value={eventForm.speakers}
-                        onChange={e => setEventForm({...eventForm, speakers: e.target.value})}
-                        placeholder="ELENA_R, DAVID_C..."
-                        className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#00E5FF]/50 transition-all placeholder:text-gray-800 uppercase"
-                      />
-                    </div>
-
-                    <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
-                        <UsersIcon size={12} className="text-[#9D4EDD]" /> Max Nodes
-                      </label>
-                      <input 
-                        required
-                        type="number"
-                        value={eventForm.capacity}
-                        onChange={e => setEventForm({...eventForm, capacity: parseInt(e.target.value)})}
                         className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#9D4EDD]/50 transition-all uppercase"
                       />
                     </div>
                   </div>
-
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
-                      <ImageIcon size={12} className="text-[#00E5FF]" /> Asset Mapping (Image URL)
-                    </label>
-                    <input 
-                      type="url"
-                      value={eventForm.imageUrl}
-                      onChange={e => setEventForm({...eventForm, imageUrl: e.target.value})}
-                      placeholder="HTTPS://IMAGES.UNSPLASH.COM/..."
-                      className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#00E5FF]/50 transition-all placeholder:text-gray-800"
-                    />
-                  </div>
-
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
-                      <FileText size={12} className="text-[#9D4EDD]" /> Data Stream (Description)
-                    </label>
-                    <textarea 
-                      required
-                      rows={4}
-                      value={eventForm.description}
-                      onChange={e => setEventForm({...eventForm, description: e.target.value})}
-                      placeholder="INITIALIZE_MISSION_PARAMETERS..."
-                      className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#9D4EDD]/50 transition-all placeholder:text-gray-800 uppercase resize-none"
-                    />
-                  </div>
-
                   <div className="pt-8 border-t border-white/5 flex gap-4">
                     <PremiumButton size="lg" className="flex-1" type="submit">Deploy Protocol</PremiumButton>
                     <PremiumButton size="lg" variant="outline" type="button" onClick={() => setIsModalOpen(false)}>Abort</PremiumButton>
@@ -381,255 +636,6 @@ export default function AdminPage() {
           </motion.div>
         </div>
       )}
-
-      {/* Delete Confirmation Modal */}
-      {isDeleteModalOpen && eventToDelete && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-md"
-          >
-            <GlassCard className="border-red-500/30">
-              <div className="flex items-center gap-4 text-red-500 mb-6">
-                 <AlertTriangle size={32} />
-                 <div>
-                    <h3 className="text-xl font-black uppercase tracking-tight">Confirm Deletion</h3>
-                    <p className="text-[10px] font-bold opacity-50 uppercase tracking-widest">Protocol Removal Request</p>
-                 </div>
-              </div>
-
-              <p className="text-gray-400 text-sm mb-8 leading-relaxed font-black uppercase tracking-tight">
-                Are you sure you want to delete this event?
-              </p>
-
-              <div className="flex gap-4">
-                <PremiumButton 
-                 variant="outline" 
-                 className="flex-1 border-red-500/20 hover:bg-red-500/10 text-red-500"
-                 onClick={deleteEvent}
-                >
-                  Confirm
-                </PremiumButton>
-                <PremiumButton 
-                  variant="ghost"
-                  onClick={() => setIsDeleteModalOpen(false)}
-                  className="flex-1 border-white/5"
-                >
-                  Cancel
-                </PremiumButton>
-              </div>
-            </GlassCard>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Main Grid: Events & Registrations */}
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-12">
-        {/* Events Management Section */}
-        <div className="xl:col-span-4 space-y-8">
-           <div className="flex flex-col lg:flex-row items-end justify-between gap-8">
-              <div className="w-full lg:w-2/3">
-                 <div className="protocol-label">Deployment / Active Protocols</div>
-                 <h2 className="text-display leading-tight">Events Hub.</h2>
-              </div>
-              
-              <div className="w-full lg:w-1/3 space-y-4">
-                 <div className="flex flex-wrap gap-2 justify-end">
-                    {['ALL', 'ACTIVE', 'UPCOMING', 'COMPLETED'].map(f => (
-                       <button
-                         key={f}
-                         onClick={() => setEventFilter(f as any)}
-                         className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ${
-                           eventFilter === f 
-                             ? 'bg-[#9D4EDD] text-white shadow-[0_0_15px_rgba(157,78,221,0.3)]' 
-                             : 'bg-white/5 text-gray-500 hover:bg-white/10'
-                         }`}
-                       >
-                         {f}
-                       </button>
-                    ))}
-                 </div>
-                 <div className="relative">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
-                    <input 
-                      type="text"
-                      placeholder="SEARCH_PROTOCOLS..."
-                      value={eventSearchTerm}
-                      onChange={e => setEventSearchTerm(e.target.value)}
-                      className="w-full bg-[#1E1642]/30 border border-white/5 rounded-xl py-4 pl-12 pr-6 text-[10px] font-mono tracking-[0.2em] focus:outline-none focus:border-[#9D4EDD]/30 transition-all placeholder:text-gray-800 uppercase"
-                    />
-                 </div>
-              </div>
-           </div>
-
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {filteredEvents.map(event => {
-                const status = getEventStatus(event);
-                return (
-                  <motion.div layout key={event.id}>
-                    <GlassCard className="p-6 h-full border-white/5 hover:border-[#9D4EDD]/20 transition-all group overflow-hidden">
-                       <div className="flex items-start justify-between mb-6">
-                          <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
-                            status === 'ACTIVE' ? 'bg-green-500/20 text-green-500 animate-pulse' :
-                            status === 'UPCOMING' ? 'bg-[#00E5FF]/20 text-[#00E5FF]' :
-                            'bg-gray-800 text-gray-500'
-                          }`}>
-                            {status === 'ACTIVE' ? 'LIVE_NOW' : status}
-                          </div>
-                          <button 
-                             onClick={() => {
-                               setEventToDelete(event);
-                               setIsDeleteModalOpen(true);
-                             }}
-                             className="p-2 rounded-lg bg-red-500/5 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 transition-all"
-                             title="Purge Event Protocol"
-                          >
-                             <Trash2 size={14} />
-                          </button>
-                       </div>
-
-                       <h3 className="text-xl font-black uppercase tracking-tight mb-4 line-clamp-1 group-hover:text-[#9D4EDD] transition-colors">{event.title}</h3>
-                       
-                       <div className="space-y-2 mb-6">
-                          <div className="flex items-center gap-2 text-[10px] text-gray-500 font-mono tracking-tight uppercase">
-                             <Calendar size={12} className="text-[#9D4EDD]" /> {event.date}
-                          </div>
-                          <div className="flex items-center gap-2 text-[10px] text-gray-500 font-mono tracking-tight uppercase">
-                             <UsersIcon size={12} className="text-[#00E5FF]" /> {event.registeredCount} / {event.capacity} Nodes
-                          </div>
-                       </div>
-
-                       <div className="pt-4 border-t border-white/5 flex items-center justify-between">
-                          <div className="flex -space-x-1">
-                             {[1,2,3].map(i => (
-                                <div key={i} className="w-6 h-6 rounded-full border border-[#1E1642] bg-gray-900" />
-                             ))}
-                          </div>
-                          <Link to={`/events/${event.id}`}>
-                             <PremiumButton variant="ghost" size="sm" className="!p-0 h-auto hover:text-[#00E5FF]">
-                               Details <ArrowUpRight size={12} className="ml-1" />
-                             </PremiumButton>
-                          </Link>
-                       </div>
-                    </GlassCard>
-                  </motion.div>
-                );
-              })}
-              {filteredEvents.length === 0 && (
-                <div className="col-span-full text-center py-20 bg-white/[0.02] rounded-3xl border border-dashed border-white/5">
-                   <p className="text-gray-600 font-black uppercase tracking-[0.3em] text-[10px]">No events detected in current filter</p>
-                </div>
-              )}
-           </div>
-        </div>
-
-        {/* Separator */}
-        <div className="xl:col-span-4 h-px bg-white/5 my-4" />
-
-        {/* Attendance Scan & Stats */}
-        <div className="space-y-8">
-           <div className="protocol-label">Logistics / Attendance</div>
-           <GlassCard>
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2" title="Biometric/QR Verification Source">
-                <Scan size={20} className="text-indigo-400" /> Verify Pass
-              </h3>
-              <form onSubmit={handleScan} className="space-y-3">
-                 <input 
-                   type="text" 
-                   value={scanId}
-                   onChange={e => setScanId(e.target.value)}
-                   placeholder="Enter Pass ID"
-                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                 />
-                 <PremiumButton size="sm" className="w-full">Initialize Check-in</PremiumButton>
-              </form>
-           </GlassCard>
-
-           <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 rounded-3xl bg-white/5 border border-white/10 text-center">
-                 <div className="text-indigo-400 font-bold text-xl">{registrations.length}</div>
-                 <div className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Total</div>
-              </div>
-              <div className="p-4 rounded-3xl bg-white/5 border border-white/10 text-center">
-                 <div className="text-green-400 font-bold text-xl">
-                   {registrations.filter(r => r.status === 'attended').length}
-                 </div>
-                 <div className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Attended</div>
-              </div>
-           </div>
-        </div>
-
-        {/* Right: Registration List */}
-        <div className="lg:col-span-3 space-y-6">
-           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="relative w-full sm:w-96">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={16} />
-                <input 
-                   type="text" 
-                   placeholder="Search name, email or pass ID..."
-                   value={searchTerm}
-                   onChange={e => setSearchTerm(e.target.value)}
-                   className="w-full bg-white/5 border border-white/10 rounded-full pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
-              <div className="flex items-center gap-2 p-1 bg-white/5 rounded-lg border border-white/10">
-                 <button 
-                  onClick={() => setViewMode('list')}
-                  className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-indigo-500 text-white' : 'text-white/40'}`}
-                  title="List View Protocol"
-                 >
-                    <List size={18} />
-                 </button>
-                 <button 
-                  onClick={() => setViewMode('grid')}
-                  className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-indigo-500 text-white' : 'text-white/40'}`}
-                  title="Grid View Protocol"
-                 >
-                    <LayoutGrid size={18} />
-                 </button>
-              </div>
-           </div>
-
-           <div className={viewMode === 'list' ? 'space-y-3' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
-              {filteredRegistrations.map(reg => (
-                <motion.div layout key={reg.id}>
-                  <GlassCard className={`p-4 flex items-center justify-between gap-4 ${reg.status === 'attended' ? 'border-green-500/20' : ''}`}>
-                    <div className="flex items-center gap-4 min-w-0">
-                       <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${reg.status === 'attended' ? 'bg-green-500/10 text-green-400' : 'bg-white/5 text-white/30'}`}>
-                          {reg.status === 'attended' ? <CheckCircle size={20} /> : <Users size={20} />}
-                       </div>
-                       <div className="min-w-0">
-                          <div className="font-bold truncate">{reg.userName}</div>
-                          <div className="text-[10px] text-white/40 truncate">{reg.userEmail} • {getEventName(reg.eventId)}</div>
-                          <div className="text-[10px] font-mono text-indigo-400 truncate opacity-50">#{reg.id}</div>
-                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                       <button 
-                         onClick={() => toggleAttendance(reg)}
-                         className={`p-2 rounded-xl transition-all ${reg.status === 'attended' ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20' : 'bg-green-500/10 text-green-500 hover:bg-green-500/20'}`}
-                         title={reg.status === 'attended' ? 'Unmark Attendance' : 'Mark as Attended'}
-                       >
-                          {reg.status === 'attended' ? <XCircle size={18} /> : <CheckCircle size={18} />}
-                       </button>
-                       <button 
-                         onClick={() => deleteRegistration(reg.id)}
-                         className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20"
-                         title="Purge Attendance Record"
-                       >
-                          <Trash2 size={18} />
-                       </button>
-                    </div>
-                  </GlassCard>
-                </motion.div>
-              ))}
-              {filteredRegistrations.length === 0 && (
-                <div className="text-center py-20 text-white/20 italic">No matches found for your search query.</div>
-              )}
-           </div>
-        </div>
-      </div>
     </div>
   );
 }

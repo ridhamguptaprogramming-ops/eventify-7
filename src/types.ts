@@ -95,6 +95,21 @@ export interface Match {
   scheduledAt: number;
 }
 
+export interface Highlight {
+  id: string;
+  sourceId: string;
+  type: 'EVENT' | 'TOURNAMENT';
+  title: string;
+  description: string;
+  imageUrl: string;
+  completedAt: number;
+  stats?: {
+    attendance?: number;
+    winner?: string;
+    score?: string;
+  };
+}
+
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
