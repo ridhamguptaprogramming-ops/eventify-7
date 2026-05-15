@@ -20,11 +20,11 @@ export default function AboutPage() {
         setTeam([
           {
             id: '1',
-            name: 'Dr. Alistair Vance',
+           name: 'Ridham Gupta',
             role: 'Chief Architect',
             bio: 'Pioneer in distributed identity protocols and neural interface design.',
-            imageUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80',
-            linkedinUrl: '#',
+           image: '2.png',
+            linkedinUrl: 'https://www.linkedin.com/in/ridham-gupta-09056a386/',
             githubUrl: '#'
           },
           {
@@ -32,7 +32,7 @@ export default function AboutPage() {
             name: 'Serafina Thorne',
             role: 'Hardware Lead',
             bio: 'Specialist in biometric security systems and proximity-based verification.',
-            imageUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80',
+            image: '2.png',
             linkedinUrl: '#',
             githubUrl: '#'
           },
@@ -41,7 +41,16 @@ export default function AboutPage() {
             name: 'Julian Nexus',
             role: 'Core Systems',
             bio: 'Optimizing high-concurrency event data streams and real-time synchronization.',
-            imageUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80',
+            image: '2.png',
+            linkedinUrl: '#',
+            githubUrl: '#'
+          }
+          {
+            id: '4',
+            name: 'Julian Nexus',
+            role: 'Core Systems',
+            bio: 'Optimizing high-concurrency event data streams and real-time synchronization.',
+            image: '2.png',
             linkedinUrl: '#',
             githubUrl: '#'
           }
