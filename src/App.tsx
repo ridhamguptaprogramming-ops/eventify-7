@@ -41,11 +41,7 @@ function PageRoutes() {
             <Route path="/highlights" element={<HighlightsPage />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/gaming" element={<GamingPage />} />
-            <Route path="/gaming/admin" element={
-              <ProtectedRoute requiredRoles={[UserRole.ADMIN, UserRole.MODERATOR]}>
-                <GamingAdminPage />
-              </ProtectedRoute>
-            } />
+            <Route path="/gaming/admin" element={<Navigate to="/admin" replace />} />
             <Route path="/login" element={<RegistrationPage />} />
             <Route path="/events/:id?" element={<EventDetailsPage />} />
             <Route 

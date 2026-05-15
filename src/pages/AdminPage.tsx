@@ -24,9 +24,11 @@ import {
   Clock,
   ArrowUpRight,
   Gamepad2,
+  Rocket,
 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { Registration, Event, OperationType, Stats, Tournament, Match, Highlight } from '../types';
+import { Registration, Event, OperationType, Stats, Tournament, Match, Highlight, UserRole } from '../types';
+import { seedGamingData } from '../services/gamingService';
 import { GlassCard, PremiumButton } from '../components/ui/PremiumComponents';
 import { handleFirestoreError } from '../lib/utils';
 
@@ -48,7 +50,9 @@ export default function AdminPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [eventFilter, setEventFilter] = useState<'ALL' | 'ACTIVE' | 'UPCOMING' | 'COMPLETED'>('ALL');
+  const [gamingStatusFilter, setGamingStatusFilter] = useState<'ALL' | 'live' | 'upcoming' | 'completed'>('ALL');
   const [itemToDelete, setItemToDelete] = useState<{ id: string; collection: string; title: string } | null>(null);
+  const [isSeeding, setIsSeeding] = useState(false);
   
   const [eventForm, setEventForm] = useState({
     title: '',
@@ -61,6 +65,23 @@ export default function AdminPage() {
     imageUrl: '',
     startDate: '',
     endDate: ''
+  });
+
+  const [isGamingModalOpen, setIsGamingModalOpen] = useState(false);
+  const [gamingForm, setGamingForm] = useState({
+    type: 'TOURNAMENT' as 'TOURNAMENT' | 'MATCH',
+    gameName: '',
+    prizePool: '$10,000',
+    startDate: '',
+    teamSize: '5',
+    entryFee: 'FREE',
+    // Match fields
+    tournamentId: '',
+    teamAName: '',
+    teamBName: '',
+    scoreA: 0,
+    scoreB: 0,
+    matchStatus: 'upcoming' as 'upcoming' | 'live' | 'completed'
   });
 
   useEffect(() => {
@@ -102,11 +123,56 @@ export default function AdminPage() {
   const deleteItem = async () => {
     if (!itemToDelete) return;
     try {
+      if (itemToDelete.collection === 'tournaments') {
+        const relatedMatches = matches.filter(m => m.tournamentId === itemToDelete.id);
+        for (const m of relatedMatches) {
+          await deleteDoc(doc(db, 'matches', m.id));
+        }
+        const relatedHighlights = highlights.filter(h => h.sourceId === itemToDelete.id);
+        for (const h of relatedHighlights) {
+          await deleteDoc(doc(db, 'highlights', h.id));
+        }
+      }
       await deleteDoc(doc(db, itemToDelete.collection, itemToDelete.id));
       setIsDeleteModalOpen(false);
       setItemToDelete(null);
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `${itemToDelete.collection}/${itemToDelete.id}`);
+    }
+  };
+
+  const handleAddGaming = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (gamingForm.type === 'TOURNAMENT') {
+        await addDoc(collection(db, 'tournaments'), {
+          gameName: gamingForm.gameName,
+          prizePool: gamingForm.prizePool,
+          startDate: new Date(gamingForm.startDate).getTime() || Date.now(),
+          registeredTeamsCount: 0,
+          teamSize: parseInt(gamingForm.teamSize),
+          entryFee: gamingForm.entryFee,
+          status: 'upcoming',
+          bannerImage: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80'
+        });
+      } else {
+        await addDoc(collection(db, 'matches'), {
+          tournamentId: gamingForm.tournamentId,
+          teamA: { id: 'team_a', name: gamingForm.teamAName },
+          teamB: { id: 'team_b', name: gamingForm.teamBName },
+          scoreA: gamingForm.scoreA,
+          scoreB: gamingForm.scoreB,
+          matchStatus: gamingForm.matchStatus,
+          scheduledAt: Date.now()
+        });
+      }
+      setIsGamingModalOpen(false);
+      setGamingForm({
+        type: 'TOURNAMENT', gameName: '', prizePool: '$10,000', startDate: '', teamSize: '5', entryFee: 'FREE',
+        tournamentId: '', teamAName: '', teamBName: '', scoreA: 0, scoreB: 0, matchStatus: 'upcoming'
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, gamingForm.type.toLowerCase() + 's');
     }
   };
 
@@ -188,6 +254,20 @@ export default function AdminPage() {
     }
   };
 
+  const filteredTournaments = tournaments.filter(t => {
+    const statusMatch = gamingStatusFilter === 'ALL' || t.status === gamingStatusFilter;
+    const searchMatch = t.gameName.toLowerCase().includes(searchTerm.toLowerCase());
+    return statusMatch && searchMatch;
+  });
+
+  const filteredMatches = matches.filter(m => {
+    const tournament = tournaments.find(t => t.id === m.tournamentId);
+    const tournamentName = tournament?.gameName || '';
+    const statusMatch = gamingStatusFilter === 'ALL' || m.matchStatus === gamingStatusFilter;
+    const searchMatch = (m.teamA.name + m.teamB.name + tournamentName).toLowerCase().includes(searchTerm.toLowerCase());
+    return statusMatch && searchMatch;
+  });
+
   const getEventStatus = (event: Event) => {
     const now = Date.now();
     if (!event.startDate || !event.endDate) return 'UPCOMING';
@@ -253,6 +333,30 @@ export default function AdminPage() {
              <PremiumButton variant="outline" size="sm" onClick={() => setIsModalOpen(true)}>
                 <Plus size={18} className="mr-2" /> Add Event
              </PremiumButton>
+           )}
+           {activeTab === 'GAMING_HUB' && (
+             <div className="flex items-center gap-2">
+               <PremiumButton 
+                 variant="outline" 
+                 size="sm" 
+                 className="border-white/10 hover:border-[#00E5FF]/30"
+                 onClick={async () => {
+                   setIsSeeding(true);
+                   try {
+                     await seedGamingData();
+                   } catch (err) {
+                     console.error('Seeding failed:', err);
+                   }
+                   setIsSeeding(false);
+                 }}
+                 disabled={isSeeding}
+               >
+                  <Rocket size={18} className="mr-2" /> {isSeeding ? 'SEEDING...' : 'SEED_DATA'}
+               </PremiumButton>
+               <PremiumButton variant="outline" size="sm" onClick={() => setIsGamingModalOpen(true)}>
+                  <Plus size={18} className="mr-2" /> Deploy Gaming
+               </PremiumButton>
+             </div>
            )}
         </div>
       </header>
@@ -432,8 +536,21 @@ export default function AdminPage() {
 
         {activeTab === 'GAMING_HUB' && (
           <div className="space-y-12">
+            <div className="flex items-center gap-4 mb-4">
+               {(['ALL', 'live', 'upcoming', 'completed'] as const).map(f => (
+                  <button
+                     key={f}
+                     onClick={() => setGamingStatusFilter(f)}
+                     className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all ${
+                       gamingStatusFilter === f ? 'bg-[#00E5FF] text-black border-[#00E5FF]' : 'border-white/10 text-gray-500 hover:text-white'
+                     }`}
+                  >
+                     {f}
+                  </button>
+               ))}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-               {tournaments.map(tournament => (
+               {filteredTournaments.map(tournament => (
                  <GlassCard key={tournament.id} className="group relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-[#00E5FF]/10 to-transparent pointer-events-none" />
                     <div className="flex items-start justify-between mb-8">
@@ -484,7 +601,7 @@ export default function AdminPage() {
             <div className="space-y-8">
                <div className="protocol-label">Live Operation / Matches</div>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {matches.map(match => (
+                  {filteredMatches.map(match => (
                     <GlassCard key={match.id} className="!p-6 border-white/5 flex items-center justify-between">
                        <div className="flex-1 flex items-center gap-6">
                           <div className="text-center min-w-[80px]">
@@ -625,10 +742,154 @@ export default function AdminPage() {
                         className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#9D4EDD]/50 transition-all uppercase"
                       />
                     </div>
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Start Date (ISO)</label>
+                      <input 
+                        required
+                        type="datetime-local"
+                        value={eventForm.startDate}
+                        onChange={e => setEventForm({...eventForm, startDate: e.target.value})}
+                        className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#00E5FF]/50 transition-all uppercase"
+                      />
+                    </div>
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">End Date (ISO)</label>
+                      <input 
+                        required
+                        type="datetime-local"
+                        value={eventForm.endDate}
+                        onChange={e => setEventForm({...eventForm, endDate: e.target.value})}
+                        className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#9D4EDD]/50 transition-all uppercase"
+                      />
+                    </div>
+                    <div className="md:col-span-2 space-y-4">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Speakers (Comma Separated)</label>
+                      <input 
+                        type="text"
+                        value={eventForm.speakers}
+                        onChange={e => setEventForm({...eventForm, speakers: e.target.value})}
+                        placeholder="ORION_X, CYBER_PUNK..."
+                        className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#00E5FF]/50 transition-all uppercase"
+                      />
+                    </div>
                   </div>
                   <div className="pt-8 border-t border-white/5 flex gap-4">
                     <PremiumButton size="lg" className="flex-1" type="submit">Deploy Protocol</PremiumButton>
                     <PremiumButton size="lg" variant="outline" type="button" onClick={() => setIsModalOpen(false)}>Abort</PremiumButton>
+                  </div>
+                </form>
+              </div>
+            </GlassCard>
+          </motion.div>
+        </div>
+      )}
+      {/* Gaming Entry Modal */}
+      {isGamingModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+          >
+            <GlassCard className="!p-0 overflow-hidden flex flex-col h-full border-white/10 shadow-2xl">
+              <div className="p-8 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+                <div>
+                  <div className="protocol-label !mb-2">Gaming / Deployment</div>
+                  <h2 className="text-2xl font-black uppercase tracking-tight">Deploy Gaming Strategy</h2>
+                </div>
+                <button 
+                  onClick={() => setIsGamingModalOpen(false)}
+                  className="p-3 hover:bg-white/5 rounded-full transition-colors text-gray-500 hover:text-white"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-[#1E1642]/20">
+                <form onSubmit={handleAddGaming} className="space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="md:col-span-2 space-y-4">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Entry Type</label>
+                      <div className="flex bg-white/5 p-1 rounded-xl">
+                        {(['TOURNAMENT', 'MATCH'] as const).map(t => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => setGamingForm({...gamingForm, type: t})}
+                            className={`flex-1 py-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                              gamingForm.type === t ? 'bg-[#9D4EDD] text-white shadow-lg' : 'text-gray-500 hover:text-white'
+                            }`}
+                          >
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {gamingForm.type === 'TOURNAMENT' ? (
+                      <>
+                        <div className="space-y-4">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Game Name</label>
+                          <input 
+                            required
+                            type="text"
+                            value={gamingForm.gameName}
+                            onChange={e => setGamingForm({...gamingForm, gameName: e.target.value})}
+                            className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#00E5FF]/50 transition-all uppercase"
+                          />
+                        </div>
+                        <div className="space-y-4">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Prize Pool</label>
+                          <input 
+                            required
+                            type="text"
+                            value={gamingForm.prizePool}
+                            onChange={e => setGamingForm({...gamingForm, prizePool: e.target.value})}
+                            className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#9D4EDD]/50 transition-all uppercase"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="md:col-span-2 space-y-4">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Parent Tournament</label>
+                          <select 
+                            value={gamingForm.tournamentId}
+                            onChange={e => setGamingForm({...gamingForm, tournamentId: e.target.value})}
+                            className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#00E5FF]/50 transition-all uppercase"
+                          >
+                            <option value="">SELECT_TOURNAMENT</option>
+                            {tournaments.map(t => (
+                              <option key={t.id} value={t.id}>{t.gameName}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-4">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Team Alpha</label>
+                          <input 
+                            required
+                            type="text"
+                            value={gamingForm.teamAName}
+                            onChange={e => setGamingForm({...gamingForm, teamAName: e.target.value})}
+                            className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#00E5FF]/50 transition-all uppercase"
+                          />
+                        </div>
+                        <div className="space-y-4">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Team Omega</label>
+                          <input 
+                            required
+                            type="text"
+                            value={gamingForm.teamBName}
+                            onChange={e => setGamingForm({...gamingForm, teamBName: e.target.value})}
+                            className="w-full bg-white/5 border border-white/5 rounded-2xl py-4 px-6 text-xs font-mono tracking-widest focus:outline-none focus:border-[#9D4EDD]/50 transition-all uppercase"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <div className="pt-8 border-t border-white/5 flex gap-4">
+                    <PremiumButton size="lg" className="flex-1" type="submit">Execute Protocol</PremiumButton>
+                    <PremiumButton size="lg" variant="outline" type="button" onClick={() => setIsGamingModalOpen(false)}>Abort</PremiumButton>
                   </div>
                 </form>
               </div>

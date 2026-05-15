@@ -8,36 +8,7 @@ export const seedGamingData = async () => {
     if (!tSnap.empty) return; // Already seeded
 
     const tournaments: Omit<Tournament, 'id'>[] = [
-      {
-        gameName: 'VALORANT: PROTOCOL_ZERO',
-        prizePool: '$100,000',
-        startDate: Date.now() + 86400000 * 5,
-        registeredTeamsCount: 64,
-        bannerImage: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80',
-        teamSize: 5,
-        entryFee: 'FREE',
-        status: 'upcoming'
-      },
-      {
-        gameName: 'BGMI: APEX_SQUAD_OPEN',
-        prizePool: '$25,000',
-        startDate: Date.now() + 86400000 * 2,
-        registeredTeamsCount: 128,
-        bannerImage: 'https://images.unsplash.com/photo-1542751110-97427bbecf20?auto=format&fit=crop&q=80',
-        teamSize: 4,
-        entryFee: '$10',
-        status: 'upcoming'
-      },
-      {
-        gameName: 'FIFA 26: VIRTUAL_KICKOFF',
-        prizePool: '$5,000',
-        startDate: Date.now(),
-        registeredTeamsCount: 32,
-        bannerImage: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&q=80',
-        teamSize: 1,
-        entryFee: 'FREE',
-        status: 'live'
-      }
+      
     ];
 
     for (const t of tournaments) {

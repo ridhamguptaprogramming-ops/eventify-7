@@ -20,39 +20,74 @@ export default function AboutPage() {
         setTeam([
           {
             id: '1',
-           name: 'Ridham Gupta',
+            name: 'Ridham gupta',
             role: 'Chief Architect',
             bio: 'Pioneer in distributed identity protocols and neural interface design.',
-           image: '2.png',
+            imageUrl: '2.png',
             linkedinUrl: 'https://www.linkedin.com/in/ridham-gupta-09056a386/',
-            githubUrl: '#'
           },
           {
             id: '2',
-            name: 'Serafina Thorne',
+            name: 'Pranav Sharma',
             role: 'Hardware Lead',
             bio: 'Specialist in biometric security systems and proximity-based verification.',
-            image: '2.png',
-            linkedinUrl: '#',
-            githubUrl: '#'
+            imageUrl: '6.png',
+            linkedinUrl: 'https://www.linkedin.com/in/hackwithpranav/',
+            
+          }, 
+          {
+            id: '5',
+            name: 'Ishika ',
+            role: 'Core Systems',
+            bio: 'Optimizing high-concurrency event data streams and real-time synchronization.',
+            imageUrl: '1.png',
+            linkedinUrl: '',
+           
           },
           {
             id: '3',
-            name: 'Julian Nexus',
+            name: 'Arman Khan',
             role: 'Core Systems',
             bio: 'Optimizing high-concurrency event data streams and real-time synchronization.',
-            image: '2.png',
-            linkedinUrl: '#',
-            githubUrl: '#'
-          }
+            imageUrl: '3.png',
+            linkedinUrl: 'https://www.linkedin.com/in/arman-khan-778874350/',
+            
+          },
           {
             id: '4',
-            name: 'Julian Nexus',
+            name: 'Mohammad Ayan Khan',
             role: 'Core Systems',
             bio: 'Optimizing high-concurrency event data streams and real-time synchronization.',
-            image: '2.png',
-            linkedinUrl: '#',
-            githubUrl: '#'
+            imageUrl: '5.png',
+            linkedinUrl: 'https://www.linkedin.com/in/mohammad-ayan-khan-40a164333/',
+           
+          },
+          {
+            id: '6',
+            name: 'KHUSHAL AGARWAL',
+            role: 'Core Systems',
+            bio: 'Optimizing high-concurrency event data streams and real-time synchronization.',
+            imageUrl: '4.png',
+            linkedinUrl: 'https://www.linkedin.com/in/khushal-agarwal-172406353/',
+           
+          },
+          {
+            id: '7',
+            name: 'PRINCE YADAV',
+            role: 'Core Systems',
+            bio: 'Optimizing high-concurrency event data streams and real-time synchronization.',
+            imageUrl: '4.png',
+            linkedinUrl: 'https://www.linkedin.com/in/khushal-agarwal-172406353/',
+           
+          },
+          {
+            id: '8',
+            name: 'AUNPAM SINGH',
+            role: 'Core Systems',
+            bio: 'Optimizing high-concurrency event data streams and real-time synchronization.',
+            imageUrl: '4.png',
+            linkedinUrl: 'https://www.linkedin.com/in/khushal-agarwal-172406353/',
+           
           }
         ]);
       } else {
@@ -137,22 +172,24 @@ export default function AboutPage() {
                 whileHover={{ y: -10 }}
               >
                 <GlassCard className="p-0 overflow-hidden border-white/5 hover:border-[#9D4EDD]/30 transition-all group relative">
-                  <div className="h-80 relative overflow-hidden">
-                    {member.imageUrl ? (
+                  <div className="h-80 relative overflow-hidden bg-[#1E1642]/50">
+                    {(member.imageUrl || (member as any).image) ? (
                       <img 
-                        src={member.imageUrl} 
+                        src={member.imageUrl || (member as any).image} 
                         alt={member.name} 
-                        className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-110"
+                        className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-110 relative z-10"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
                       />
-                    ) : (
-                      <div className="w-full h-full bg-white/5 flex items-center justify-center text-3xl font-black text-white/10 uppercase">
-                        {member.name.split(' ').map(n => n[0]).join('')}
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0F0A1F] via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
+                    ) : null}
+                    <div className="absolute inset-0 flex items-center justify-center text-3xl font-black text-white/10 uppercase z-0 pointer-events-none">
+                      {member.name.split(' ').map(n => n[0]).join('')}
+                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0F0A1F] via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity z-20" />
                     
                     {/* Social Hover Overlay */}
-                    <div className="absolute inset-0 flex items-center justify-center gap-4 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-4 group-hover:translate-y-0">
+                    <div className="absolute inset-0 flex items-center justify-center gap-4 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-4 group-hover:translate-y-0 z-30">
                       {member.linkedinUrl && (
                         <a href={member.linkedinUrl} target="_blank" rel="noopener noreferrer" className="p-3 bg-white/10 backdrop-blur-md rounded-full border border-white/20 hover:bg-[#9D4EDD] hover:border-[#9D4EDD] transition-all">
                           <Linkedin size={20} />
@@ -199,11 +236,11 @@ export default function AboutPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
                <div className="p-8 bg-white/5 rounded-3xl border border-white/10 text-center">
-                  <div className="text-[#00E5FF] font-black text-4xl mb-2 italic">12K+</div>
+                  <div className="text-[#00E5FF] font-black text-4xl mb-2 italic">00</div>
                   <div className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Pioneers</div>
                </div>
                <div className="p-8 bg-white/5 rounded-3xl border border-white/10 text-center">
-                  <div className="text-[#9D4EDD] font-black text-4xl mb-2 italic">450+</div>
+                  <div className="text-[#9D4EDD] font-black text-4xl mb-2 italic">00</div>
                   <div className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Deployments</div>
                </div>
             </div>

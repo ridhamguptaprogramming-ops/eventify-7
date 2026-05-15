@@ -18,13 +18,11 @@ import {
   ShieldCheck,
   Rocket
 } from 'lucide-react';
-import { collection, onSnapshot, query, orderBy, limit, addDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Tournament, Team, Match, OperationType } from '../types';
+import { Tournament, Match } from '../types';
 import { GlassCard, PremiumButton } from '../components/ui/PremiumComponents';
 import { useAuth } from '../context/AuthContext';
-import { handleFirestoreError } from '../lib/utils';
-import { seedGamingData } from '../services/gamingService';
 
 export default function GamingPage() {
   const { user } = useAuth();
@@ -32,15 +30,15 @@ export default function GamingPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'TOURNAMENTS' | 'LEADERBOARD' | 'SCHEDULE'>('TOURNAMENTS');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    seedGamingData();
-    
+    // Only fetch live data, no automatic seeding to prevent restoring unwanted data
     const unsubTournaments = onSnapshot(collection(db, 'tournaments'), (snapshot) => {
       setTournaments(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Tournament)));
     });
 
-    const qMatches = query(collection(db, 'matches'), orderBy('scheduledAt', 'asc'), limit(10));
+    const qMatches = query(collection(db, 'matches'), orderBy('scheduledAt', 'asc'), limit(20));
     const unsubMatches = onSnapshot(qMatches, (snapshot) => {
       setMatches(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Match)));
       setLoading(false);
@@ -51,6 +49,10 @@ export default function GamingPage() {
       unsubMatches();
     };
   }, []);
+
+  const filteredTournaments = tournaments.filter(t => 
+    t.gameName.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -71,7 +73,6 @@ export default function GamingPage() {
       <section className="relative h-screen flex items-center justify-center overflow-hidden pt-20">
         <div className="absolute inset-0 z-0">
           <div className="absolute inset-0 bg-gradient-to-b from-[#1E1642]/40 via-[#0B0618] to-[#0B0618]" />
-          {/* Background Particles/Glows */}
           <motion.div 
             animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
             transition={{ duration: 10, repeat: Infinity }}
@@ -91,7 +92,7 @@ export default function GamingPage() {
             transition={{ duration: 1, ease: "easeOut" }}
           >
             <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-[#00E5FF] text-[10px] font-black uppercase tracking-[0.3em] mb-8">
-              <Zap size={14} className="fill-[#00E5FF]" /> Level Up Your Game
+              < Zap size={14} className="fill-[#00E5FF]" /> Level Up Your Game
             </span>
             <h1 className="text-7xl md:text-9xl font-black italic tracking-tighter uppercase mb-8 leading-tight">
               Enter The <br/>
@@ -112,7 +113,6 @@ export default function GamingPage() {
           </motion.div>
         </div>
 
-        {/* Scroll Indicator */}
         <motion.div 
           animate={{ y: [0, 10, 0] }} 
           transition={{ duration: 2, repeat: Infinity }}
@@ -133,10 +133,10 @@ export default function GamingPage() {
           className="grid grid-cols-2 md:grid-cols-4 gap-6"
         >
           {[
-            { icon: <Trophy />, label: "Total Prize Pool", value: "$2.5M+", color: "#FFD000" },
-            { icon: <Users />, label: "Active Pro Teams", value: "850+", color: "#00E5FF" },
-            { icon: <Gamepad2 />, label: "Live Tournaments", value: "24", color: "#9D4EDD" },
-            { icon: <Monitor />, label: "Matches Today", value: "142", color: "#FF4D9D" },
+            { icon: <Trophy />, label: "Total Prize Pool", value: "00", color: "#FFD000" },
+            { icon: <Users />, label: "Active Pro Teams", value: "00", color: "#00E5FF" },
+            { icon: <Gamepad2 />, label: "Live Tournaments", value: tournaments.length.toString(), color: "#9D4EDD" },
+            { icon: <Monitor />, label: "Matches Detected", value: matches.length.toString(), color: "#FF4D9D" },
           ].map((stat, i) => (
             <motion.div key={i} variants={itemVariants}>
                <GlassCard className="p-8 border-white/5 hover:border-white/10 transition-all text-center group cursor-default shadow-none">
@@ -174,6 +174,8 @@ export default function GamingPage() {
               <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-[#00E5FF] transition-colors" size={18} />
               <input 
                 placeholder="SEARCH_ARENA..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-white/[0.03] border border-white/5 rounded-2xl py-4 pl-16 pr-8 text-xs font-black uppercase tracking-widest focus:outline-none focus:border-[#00E5FF]/50 focus:bg-white/[0.05] transition-all"
               />
            </div>
@@ -188,7 +190,7 @@ export default function GamingPage() {
               exit={{ opacity: 0, y: -20 }}
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
             >
-               {tournaments.length > 0 ? tournaments.map((t) => (
+               {filteredTournaments.length > 0 ? filteredTournaments.map((t) => (
                  <motion.div key={t.id} whileHover={{ y: -10 }}>
                    <GlassCard className="p-0 overflow-hidden group border-white/5 hover:border-[#9D4EDD]/30 transition-all h-[550px] shadow-none bg-white/[0.01]">
                       <div className="h-[240px] relative overflow-hidden">
@@ -236,55 +238,9 @@ export default function GamingPage() {
                    </GlassCard>
                  </motion.div>
                )) : (
-                 // Dummy Tournaments fallback if DB is empty
-                 ['VALORANT', 'BGMI PRO LEAGUE', 'FIFA 26 WORLD CUP'].map((game, i) => (
-                    <motion.div key={i} whileHover={{ y: -10 }}>
-                      <GlassCard className="p-0 overflow-hidden group border-white/5 hover:border-[#9D4EDD]/30 transition-all h-[550px] shadow-none bg-white/[0.01]">
-                        <div className="h-[240px] relative overflow-hidden">
-                          <img src={`https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=2070&auto=format&fit=crop`} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt="" />
-                          <div className="absolute inset-0 bg-gradient-to-t from-[#0B0618] to-transparent" />
-                          <div className="absolute top-6 left-6 px-3 py-1 bg-black/40 backdrop-blur-md border border-white/10 rounded-lg flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-green-500" />
-                            <span className="text-[10px] font-black uppercase tracking-widest">UPCOMING</span>
-                          </div>
-                          <div className="absolute bottom-6 left-6">
-                            <h3 className="text-3xl font-black italic tracking-tighter uppercase">{game}</h3>
-                          </div>
-                        </div>
-                        <div className="p-8">
-                          <div className="grid grid-cols-2 gap-4 mb-8">
-                            <div className="p-4 bg-white/[0.03] rounded-2xl border border-white/5">
-                              <span className="text-[8px] font-black text-gray-600 uppercase tracking-widest block mb-1">Prize Pool</span>
-                              <span className="text-xl font-black text-[#FFD000] tracking-tight">$50,000</span>
-                            </div>
-                            <div className="p-4 bg-white/[0.03] rounded-2xl border border-white/5">
-                              <span className="text-[8px] font-black text-gray-600 uppercase tracking-widest block mb-1">Entry Fee</span>
-                              <span className="text-xl font-black text-white tracking-tight">FREE</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between mb-8 px-2">
-                            <div className="flex items-center gap-3">
-                              <Users size={16} className="text-[#00E5FF]" />
-                              <div>
-                                <div className="text-[10px] font-black text-white tracking-widest uppercase">64/128 Teams</div>
-                                <div className="text-[8px] font-black text-gray-600 uppercase tracking-[0.2em]">5 vs 5 Squads</div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <Clock size={16} className="text-[#9D4EDD]" />
-                              <div>
-                                <div className="text-[10px] font-black text-white tracking-widest uppercase">Start Time</div>
-                                <div className="text-[8px] font-black text-gray-600 uppercase tracking-[0.2em]">MAY_20_2026</div>
-                              </div>
-                            </div>
-                          </div>
-                          <PremiumButton variant="premium" className="w-full h-14 uppercase font-black text-xs tracking-[0.3em] rounded-2xl shadow-[0_4px_20px_rgba(157,78,221,0.2)]">
-                            REGISTER_TEAM
-                          </PremiumButton>
-                        </div>
-                      </GlassCard>
-                    </motion.div>
-                 ))
+                 <div className="col-span-full py-40 text-center border-2 border-dashed border-white/5 rounded-3xl">
+                    <p className="text-gray-700 font-black uppercase tracking-[0.4em] text-sm italic">No active tournaments deployed in sector</p>
+                 </div>
                )}
             </motion.div>
           )}
@@ -297,42 +253,46 @@ export default function GamingPage() {
                exit={{ opacity: 0, x: -20 }}
                className="space-y-6"
              >
-                {(matches.length > 0 ? matches : [1, 2, 3, 4]).map((m, i) => (
-                  <motion.div key={i} whileHover={{ x: 10 }}>
+                {matches.length > 0 ? matches.map((m, i) => (
+                  <motion.div key={m.id} whileHover={{ x: 10 }}>
                     <GlassCard className="p-8 border-white/5 hover:border-[#00E5FF]/30 transition-all flex flex-col md:flex-row items-center justify-between gap-8 bg-white/[0.01]">
                        <div className="flex items-center gap-4 text-gray-500 italic font-black uppercase text-[10px] tracking-[0.3em] w-32">
-                          <Play size={14} className={i === 0 ? 'text-red-500' : ''} /> {i === 0 ? 'LIVE_NOW' : '18:30_UTC'}
+                          <Play size={14} className={m.matchStatus === 'live' ? 'text-red-500' : ''} /> {m.matchStatus === 'live' ? 'LIVE_NOW' : new Date(m.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                        </div>
                        
                        <div className="flex-1 flex items-center justify-center gap-4 md:gap-12">
                           <div className="flex flex-col items-center md:flex-row-reverse gap-4 flex-1 justify-end">
-                             <div className="text-xl md:text-2xl font-black italic tracking-tighter uppercase whitespace-nowrap">TEAM ALPHA</div>
+                             <div className="text-xl md:text-2xl font-black italic tracking-tighter uppercase whitespace-nowrap">{m.teamA.name}</div>
                              <div className="w-16 h-16 rounded-full bg-white/[0.05] border border-white/10 flex items-center justify-center text-[#9D4EDD]">
                                 <Rocket size={24} />
                              </div>
                           </div>
                           
                           <div className="flex flex-col items-center gap-2">
-                             <div className="text-3xl md:text-5xl font-black tracking-tighter text-white font-mono">{i === 0 ? '2 - 1' : 'VS'}</div>
+                             <div className="text-3xl md:text-5xl font-black tracking-tighter text-white font-mono">{m.scoreA} - {m.scoreB}</div>
                              <div className="px-3 py-1 bg-white/[0.05] border border-white/10 rounded-full text-[8px] font-black uppercase tracking-widest text-[#00E5FF]">Best of 3</div>
                           </div>
-
+ 
                           <div className="flex flex-col items-center md:flex-row gap-4 flex-1 justify-start">
                              <div className="w-16 h-16 rounded-full bg-white/[0.05] border border-white/10 flex items-center justify-center text-[#00E5FF]">
                                 <Sword size={24} />
                              </div>
-                             <div className="text-xl md:text-2xl font-black italic tracking-tighter uppercase whitespace-nowrap">OMEGA ELITE</div>
+                             <div className="text-xl md:text-2xl font-black italic tracking-tighter uppercase whitespace-nowrap">{m.teamB.name}</div>
                           </div>
                        </div>
                        
                        <div className="w-full md:w-auto">
                           <PremiumButton variant="outline" size="sm" className="w-full md:w-auto border-white/10 hover:border-[#00E5FF]/50 text-[10px] tracking-[0.2em] uppercase font-black h-12 px-8">
-                             {i === 0 ? 'WATCH_LIVE' : 'PRE-MATCH_VIEW'}
+                             {m.matchStatus === 'live' ? 'WATCH_LIVE' : 'PRE-MATCH_VIEW'}
                           </PremiumButton>
                        </div>
                     </GlassCard>
                   </motion.div>
-                ))}
+                )) : (
+                  <div className="py-20 text-center border border-dashed border-white/5 rounded-3xl">
+                     <p className="text-gray-700 font-black uppercase tracking-widest text-xs">No scheduled matches detected</p>
+                  </div>
+                )}
              </motion.div>
           )}
 
@@ -424,7 +384,6 @@ export default function GamingPage() {
                   className="w-full h-full object-cover opacity-50 group-hover:scale-105 transition-transform duration-1000" 
                   alt="" 
                 />
-                {/* Overlays */}
                 <div className="absolute top-8 left-8 flex items-center gap-4">
                    <div className="px-4 py-1.5 bg-red-600 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
                       <div className="w-2 h-2 bg-white rounded-full animate-ping" />
@@ -443,31 +402,6 @@ export default function GamingPage() {
                 </div>
              </div>
 
-             <div className="space-y-6">
-                {[
-                  { title: "Scrims: Team_Pulse vs Ghost", viewers: "2.4K", category: "BGMI", img: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&q=80" },
-                  { title: "Ranked Climb: Apex_Predator", viewers: "1.1K", category: "Apex Legends", img: "https://images.unsplash.com/photo-1614013910341-cd4cecc21c2e?auto=format&fit=crop&q=80" },
-                  { title: "Official Replay: FIFA Quals", viewers: "4.8K", category: "FIFA 26", img: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&q=80" },
-                ].map((stream, i) => (
-                  <motion.div key={i} whileHover={{ x: 10 }}>
-                    <GlassCard className="p-4 border-white/5 hover:border-white/20 transition-all flex gap-4 cursor-pointer bg-white/[0.01]">
-                       <div className="w-32 h-20 rounded-xl overflow-hidden flex-shrink-0 relative">
-                          <img src={stream.img} className="w-full h-full object-cover" alt="" />
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                             <Play size={16} className="text-white fill-current" />
-                          </div>
-                       </div>
-                       <div className="flex flex-col justify-center gap-1">
-                          <div className="text-xs font-black uppercase tracking-tight line-clamp-1">{stream.title}</div>
-                          <div className="text-[8px] font-black text-[#9D4EDD] uppercase tracking-widest">{stream.category}</div>
-                          <div className="flex items-center gap-1.5 text-[8px] font-black text-gray-600 uppercase tracking-widest mt-1">
-                             <Users size={10} /> {stream.viewers}
-                          </div>
-                       </div>
-                    </GlassCard>
-                  </motion.div>
-                ))}
-             </div>
           </div>
         </div>
       </section>
@@ -538,7 +472,6 @@ export default function GamingPage() {
                </div>
             </div>
             
-            {/* Animated Light Streaks */}
             <motion.div 
               animate={{ x: [-500, 500], y: [-500, 500] }}
               transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
