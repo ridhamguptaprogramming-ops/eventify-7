@@ -76,7 +76,7 @@ export default function AboutPage() {
             name: 'PRINCE YADAV',
             role: 'Core Systems',
             bio: 'Optimizing high-concurrency event data streams and real-time synchronization.',
-            imageUrl: '7.png',
+            imageUrl: '8.png',
             linkedinUrl: 'https://www.linkedin.com/in/khushal-agarwal-172406353/',
            
           },
@@ -85,8 +85,8 @@ export default function AboutPage() {
             name: 'AUNPAM SINGH',
             role: 'Core Systems',
             bio: 'Optimizing high-concurrency event data streams and real-time synchronization.',
-            imageUrl: '4.png',
-            linkedinUrl: 'https://www.linkedin.com/in/khushal-agarwal-172406353/',
+            imageUrl: '7.png',
+            linkedinUrl: 'https://www.linkedin.com/in/anupam-singh-082277381/',
            
           }
         ]);
